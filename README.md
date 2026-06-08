@@ -31,17 +31,6 @@
 │   ├── export_to_sql.py
 │   └── connect_sqlserver.py
 │
-├── notebooks/
-│   │
-│   ├── collect_weather.ipynb
-│   ├── collect_traffic.ipynb
-│   ├── collect_population.ipynb
-│   ├── collect_tree.ipynb
-│   ├── merge_data.ipynb
-│   ├── preprocessing.ipynb
-│   ├── eda.ipynb
-│   ├── train_model.ipynb
-│   └── evaluate_model.ipynb
 │
 ├── src/
 │   │
@@ -60,5 +49,8 @@
 │   │   ├── train.py
 │   │   ├── predict.py
 │   │   └── evaluate.py
-
+│   ├── EDA/
+│   │   ├── traffic
+│   │   ├── weather
+│   │   └── population
     

@@ -1,0 +1,27 @@
+{
+  "source": "Open-Meteo Air Quality API",
+  "underlying_model": "CAMS Global Atmospheric Composition Forecast",
+  "domain_parameter": "cams_global",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "start_date": "2025-01-01",
+  "end_date": "2025-12-31",
+  "hours_per_location": 8760,
+  "locations": 65,
+  "expected_total_rows": 569400,
+  "hourly_variables": [
+    "pm10",
+    "pm2_5",
+    "carbon_monoxide",
+    "nitrogen_dioxide",
+    "sulphur_dioxide",
+    "ozone",
+    "us_aqi",
+    "us_aqi_pm2_5",
+    "us_aqi_pm10",
+    "us_aqi_nitrogen_dioxide",
+    "us_aqi_carbon_monoxide",
+    "us_aqi_ozone",
+    "us_aqi_sulphur_dioxide"
+  ],
+  "note": "us_aqi follows the United States AQI convention. This is modeled gridded data, not direct station observations."
+}

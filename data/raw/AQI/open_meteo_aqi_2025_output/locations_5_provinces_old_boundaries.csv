@@ -1,0 +1,66 @@
+﻿province,province_slug,source_traffic_file,location_name,lat,lon,expected_hours
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Vung_Tau,10.34599,107.08426,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Ba_Ria,10.49631,107.16849,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Phu_My,10.568,107.07,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Chau_Duc,10.658,107.25,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Con_Dao,8.686,106.608,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Dat_Do,10.48,107.272,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Long_Dien,10.485,107.216,8760
+Bà Rịa - Vũng Tàu,ba_ria_vung_tau,traffic_ba_ria_vung_tau_2025_old_map.csv,Xuyen_Moc,10.541,107.401,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_1,10.7756,106.7009,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_3,10.7844,106.6843,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_4,10.7578,106.7013,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_5,10.754,106.6636,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_6,10.7467,106.6366,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_7,10.734,106.7216,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_8,10.7246,106.6282,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_10,10.7746,106.6679,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_11,10.7628,106.65,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_12,10.8672,106.6413,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Binh_Tan,10.7653,106.6033,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Binh_Thanh,10.8111,106.711,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Go_Vap,10.8387,106.6653,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Phu_Nhuan,10.7992,106.6802,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Tan_Binh,10.801,106.6526,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Tan_Phu,10.7902,106.6284,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Thanh_Pho_Thu_Duc,10.8494,106.7537,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Binh_Chanh,10.6779,106.5647,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Can_Gio,10.4114,106.9547,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Cu_Chi,10.9733,106.4931,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Hoc_Mon,10.8836,106.5897,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Nha_Be,10.6956,106.7402,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Tay_Ninh,11.313,106.096,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Hoa_Thanh,11.286,106.132,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Trang_Bang,11.029,106.357,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Ben_Cau,11.111,106.17,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Chau_Thanh,11.252,106.045,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Duong_Minh_Chau,11.361,106.243,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Go_Dau,11.088,106.264,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Tan_Bien,11.548,106.012,8760
+Tây Ninh,tay_ninh,traffic_tay_ninh_2025_old_map.csv,Tan_Chau,11.576,106.176,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Tan_An,10.5359,106.4137,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Kien_Tuong,10.766,105.927,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Ben_Luc,10.642,106.485,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Can_Duoc,10.541,106.598,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Can_Giuoc,10.608,106.672,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Chau_Thanh,10.458,106.492,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Duc_Hoa,10.895,106.403,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Duc_Hue,10.874,106.267,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Moc_Hoa,10.756,105.96,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Tan_Hung,10.833,105.662,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Tan_Thanh,10.603,106.075,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Tan_Tru,10.524,106.517,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Thanh_Hoa,10.62,106.183,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Thu_Thua,10.657,106.344,8760
+Long An,long_an,traffic_long_an_2025_old_map.csv,Vinh_Hung,10.892,105.785,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Bien_Hoa,10.9574,106.8427,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Long_Khanh,10.9273,107.2465,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Cam_My,10.787,107.257,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Dinh_Quan,11.199,107.353,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Long_Thanh,10.79,106.947,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Nhon_Trach,10.708,106.883,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Tan_Phu,11.374,107.401,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Thong_Nhat,10.951,107.159,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Trang_Bom,10.951,107.005,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Vinh_Cuu,11.204,107.054,8760
+Đồng Nai,dong_nai,traffic_dong_nai_2025_old_map.csv,Xuan_Loc,10.926,107.416,8760

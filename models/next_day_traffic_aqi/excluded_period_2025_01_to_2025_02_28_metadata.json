@@ -1,0 +1,10 @@
+{
+  "evaluation_type": "retrospective_excluded_period",
+  "causal_forecast": false,
+  "test_start": "2025-01-01 00:00:00",
+  "test_end_exclusive": "2025-03-01 00:00:00",
+  "embargo_hours": 24,
+  "train_rows": 475800,
+  "test_rows": 88985,
+  "note": "The test period is excluded from training, but training data occurs after it; use this only as a seasonal generalization check."
+}

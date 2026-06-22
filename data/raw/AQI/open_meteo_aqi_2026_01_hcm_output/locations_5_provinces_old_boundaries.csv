@@ -1,0 +1,23 @@
+﻿province,province_slug,source_traffic_file,location_name,lat,lon,expected_hours
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_1,10.7756,106.7009,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_3,10.7844,106.6843,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_4,10.7578,106.7013,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_5,10.754,106.6636,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_6,10.7467,106.6366,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_7,10.734,106.7216,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_8,10.7246,106.6282,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_10,10.7746,106.6679,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_11,10.7628,106.65,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Quan_12,10.8672,106.6413,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Binh_Tan,10.7653,106.6033,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Binh_Thanh,10.8111,106.711,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Go_Vap,10.8387,106.6653,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Phu_Nhuan,10.7992,106.6802,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Tan_Binh,10.801,106.6526,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Tan_Phu,10.7902,106.6284,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Thanh_Pho_Thu_Duc,10.8494,106.7537,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Binh_Chanh,10.6779,106.5647,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Can_Gio,10.4114,106.9547,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Cu_Chi,10.9733,106.4931,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Hoc_Mon,10.8836,106.5897,8760
+Hồ Chí Minh,ho_chi_minh,traffic_ho_chi_minh_2025_old_map.csv,Nha_Be,10.6956,106.7402,8760

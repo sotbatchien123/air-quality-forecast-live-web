@@ -1,0 +1,38 @@
+{
+  "created_at_utc": "2026-06-19T04:13:31.770048+00:00",
+  "model_type": "HistGradientBoostingRegressor",
+  "fit_scope": "all_2025_weather_only_rows",
+  "training_rows": 569400,
+  "training_target_start": "2025-01-01 00:00:00",
+  "training_target_end": "2025-12-31 23:00:00",
+  "holdout_test_start": "2025-12-01 00:00:00",
+  "feature_count": 19,
+  "features": [
+    "lat",
+    "lon",
+    "estimated_vehicles",
+    "area_km2",
+    "population",
+    "density_person_km2",
+    "green_area_m2",
+    "green_per_capita_m2",
+    "target_hour_sin",
+    "target_hour_cos",
+    "target_dow_sin",
+    "target_dow_cos",
+    "target_doy_sin",
+    "target_doy_cos",
+    "forecast_temperature_2m",
+    "forecast_relative_humidity_2m",
+    "forecast_precipitation",
+    "forecast_wind_speed_10m",
+    "forecast_cloud_cover"
+  ],
+  "targets": [
+    "target_currentspeed",
+    "target_traffic_density",
+    "target_us_aqi"
+  ],
+  "weather_scope_note": "The current project supplies Ho Chi Minh City weather for all five provinces.",
+  "usage_note": "This exogenous model supports multi-day forecasts from weather, calendar, location, population, traffic capacity, and green-space features without requiring future traffic or AQI observations."
+}

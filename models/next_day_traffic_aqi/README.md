@@ -1,49 +1,98 @@
-# Next-Day Traffic and AQI Model
+# HistGradientBoosting: next-day và weather-only
 
-This model predicts the same hour on the following day for every location.
+Thư mục này chứa hai nhánh `HistGradientBoostingRegressor` và các báo cáo
+backtest. Đây là bước baseline học máy trước khi dự án chuyển sang XGBoost.
 
-## Targets
+## Mục tiêu
 
-- `target_currentspeed`
-- `target_traffic_density`
-- `target_us_aqi`
+Ba model độc lập dự báo:
 
-## Features
+- `target_currentspeed`.
+- `target_traffic_density`.
+- `target_us_aqi`.
 
-- Next-day weather for the target hour
-- Traffic and AQI from the same hour one day earlier
-- Rolling 24-hour traffic and AQI statistics
-- Population, vehicle count, area, and tree/green-area features
-- Target-hour and calendar seasonality
+## Model next-day
 
-The model does not use `pollution_index_scaled` as an input feature.
+Model dự báo cùng địa điểm và cùng giờ của ngày kế tiếp, horizon chính xác 24
+giờ. Bộ 43 feature gồm:
 
-## Train
+- 8 feature tĩnh về tọa độ, dân số, xe và diện tích xanh.
+- 6 feature chu kỳ của giờ, thứ và ngày trong năm.
+- 5 feature thời tiết tại giờ đích.
+- Weather, traffic, AQI và pollutant tại `t-24h`.
+- Rolling mean/std 24 giờ của tốc độ, mật độ, US AQI và PM2.5.
+
+Model không dùng traffic hoặc AQI tại giờ đích và không dùng trực tiếp
+`pollution_index_scaled`.
+
+### Holdout tháng 12/2025
+
+| Target | MAE | RMSE | R2 | Persistence MAE | Cải thiện MAE |
+|---|---:|---:|---:|---:|---:|
+| Current speed | 1.594 | 2.075 | 0.967 | 2.440 | 34.67% |
+| Traffic density | 0.02844 | 0.03819 | 0.942 | 0.04616 | 38.38% |
+| US AQI | 16.669 | 23.201 | 0.423 | 18.011 | 7.45% |
+
+Metric nguồn: [`metrics.csv`](metrics.csv).
+
+### Huấn luyện
 
 ```powershell
 python src\models\next_day_traffic_aqi.py train
 ```
 
-The default temporal holdout is December 2025. Training targets end on
-November 30, 2025.
+Lệnh tạo:
 
-Training creates two bundles:
+- `model_bundle.joblib`: chỉ fit trên target trước 01/12/2025, dùng tái hiện
+  đánh giá hoặc historical prediction tháng 12.
+- `model_bundle_full.joblib`: refit trên toàn bộ supervised rows năm 2025, dùng
+  forecast production.
+- `metadata.json`, `metadata_full.json`, `metrics.csv` và sample prediction.
 
-- `model_bundle.joblib`: holdout-safe model trained before December, used for
-  evaluation and historical prediction.
-- `model_bundle_full.joblib`: production model refit on all available labeled
-  rows through December 31, used by the `forecast` command.
-
-## Historical prediction
+### Dự báo lịch sử hoặc ngày tiếp theo
 
 ```powershell
-python src\models\next_day_traffic_aqi.py predict --target-date 2025-12-31
+python src\models\next_day_traffic_aqi.py predict `
+  --target-date 2025-12-31
+
+python src\models\next_day_traffic_aqi.py forecast `
+  --current-date 2025-12-31 `
+  --weather-file path\to\weather_forecast_2026-01-01.csv
 ```
 
-The command uses observations from the previous day and weather for the target
-day, then writes predictions to `data/processed/model_predictions`.
+Weather CSV cho một ngày phải có đúng 24 dòng liên tục và các cột `date`,
+`hour`, `temperature_2m`, `relative_humidity_2m`, `precipitation`,
+`wind_speed_10m`, `cloud_cover`.
 
-## Monthly backtest
+## Model weather-only
+
+Biến thể này chỉ dùng 19 feature: feature static, calendar và thời tiết tại giờ
+đích. Vì không cần lag traffic/AQI, model có thể dự báo toàn bộ một khoảng thời
+gian tương lai khi đã có weather forecast.
+
+### Holdout tháng 12/2025
+
+| Target | MAE | RMSE | R2 |
+|---|---:|---:|---:|
+| Current speed | 1.747 | 2.227 | 0.962 |
+| Traffic density | 0.03161 | 0.04141 | 0.932 |
+| US AQI | 19.864 | 26.293 | 0.259 |
+
+Metric nguồn: [`weather_only_metrics.csv`](weather_only_metrics.csv).
+
+### Huấn luyện và dự báo nhiều ngày
+
+```powershell
+python src\models\next_day_traffic_aqi.py train-weather-only
+
+python src\models\next_day_traffic_aqi.py forecast-weather-period `
+  --weather-file data\raw\weather\hcm_weather_2026_01.csv `
+  --output-file data\processed\model_predictions\traffic_aqi_forecast_2026_01.csv
+```
+
+Bundle production là `model_bundle_weather_only_full.joblib`.
+
+## Expanding-window backtest
 
 ```powershell
 python src\models\next_day_traffic_aqi.py backtest `
@@ -51,33 +100,23 @@ python src\models\next_day_traffic_aqi.py backtest `
   --last-test-month 2025-12
 ```
 
-Each month is tested only with models trained on earlier months. Reports include
-monthly metrics, per-province metrics, actual-vs-predicted distributions, and a
-combined summary.
+Mỗi tháng chỉ được dự báo bởi model fit trên các tháng trước đó. Tổng hợp 10
+fold, model next-day đạt:
 
-## Next-day forecast
+| Target | MAE | R2 | Cải thiện so với persistence |
+|---|---:|---:|---:|
+| Current speed | 2.589 | 0.913 | 27.59% |
+| Traffic density | 0.048 | 0.852 | 28.38% |
+| US AQI | 13.838 | 0.643 | 6.71% |
 
-For a backtest where next-day weather already exists in project history:
+Xem nhận định chi tiết tại [`backtest_assessment.md`](backtest_assessment.md).
 
-```powershell
-python src\models\next_day_traffic_aqi.py forecast --current-date 2025-12-30
-```
+## Hạn chế
 
-For a real future date, provide a 24-row weather forecast CSV:
-
-```powershell
-python src\models\next_day_traffic_aqi.py forecast `
-  --current-date 2025-12-31 `
-  --weather-file path\to\weather_forecast_2026-01-01.csv
-```
-
-The weather CSV must contain `date`, `hour`, `temperature_2m`,
-`relative_humidity_2m`, `precipitation`, `wind_speed_10m`, and `cloud_cover`.
-
-## Important assumptions
-
-- Current project weather is the Ho Chi Minh City weather series reused for all
-  five provinces.
-- AQI is Open-Meteo CAMS Global modeled data, not monitoring-station data.
-- The saved model is trained only on targets before December 2025 so December
-  remains a clean temporal holdout.
+- AQI next-day chỉ cải thiện nhẹ so với persistence và kém baseline ở một số
+  tháng.
+- Weather-only tiện cho forecast dài ngày nhưng mất thông tin trạng thái gần
+  nhất, đặc biệt ảnh hưởng đến AQI.
+- Một chuỗi weather TP. Hồ Chí Minh được dùng lại cho cả 5 tỉnh/thành.
+- Bundle `*_full` đã thấy tháng 12/2025; không dùng bundle này để báo cáo lại
+  holdout tháng 12.

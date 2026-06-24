@@ -4,32 +4,34 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Runner = (Resolve-Path (Join-Path $PSScriptRoot "run_live_collection_once.ps1")).Path
-$FileSystem = New-Object -ComObject Scripting.FileSystemObject
-$ShortRunner = $FileSystem.GetFile($Runner).ShortPath
-$TaskCommand = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File $ShortRunner"
-
-& schtasks.exe `
-    /Create `
-    /TN $TaskName `
-    /TR $TaskCommand `
-    /SC HOURLY `
-    /MO 1 `
-    /ST "00:05" `
-    /F
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Unable to register scheduled task: $TaskName"
+$StartAt = (Get-Date).Date.AddMinutes(5)
+if ($StartAt -le (Get-Date)) {
+    $StartAt = $StartAt.AddHours(1)
 }
-
+$Action = New-ScheduledTaskAction `
+    -Execute "powershell.exe" `
+    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$Runner`""
+$Trigger = New-ScheduledTaskTrigger `
+    -Once `
+    -At $StartAt `
+    -RepetitionInterval (New-TimeSpan -Hours 1) `
+    -RepetitionDuration (New-TimeSpan -Days 3650)
 $Settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
     -WakeToRun `
     -MultipleInstances IgnoreNew
-Set-ScheduledTask -TaskName $TaskName -Settings $Settings | Out-Null
+Register-ScheduledTask `
+    -TaskName $TaskName `
+    -Action $Action `
+    -Trigger $Trigger `
+    -Settings $Settings `
+    -Description "Collect live traffic/AQI/weather and forecast the next hour for DAP391" `
+    -Force | Out-Null
 
 Write-Output "Registered task: $TaskName"
 Write-Output "Schedule: every hour at minute 05"
 Write-Output "Mode: hidden; battery and missed-start execution enabled"
-Write-Output "Run now: schtasks /Run /TN $TaskName"
+Write-Output "Runner: $Runner"
+Write-Output "Run now: Start-ScheduledTask -TaskName $TaskName"

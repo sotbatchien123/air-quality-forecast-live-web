@@ -1,5 +1,5 @@
 param(
-    [string]$TomTomKeyFile = "C:\Users\ASUS G615\Air Predict model\key_tom_tom.txt",
+    [string]$TomTomKeyFile = "",
     [int]$Minute = 5,
     [switch]$RunNow
 )
@@ -16,8 +16,11 @@ if (Test-Path -LiteralPath $LockFile) {
     $OwnerPid = (Get-Content -LiteralPath $LockFile -Raw).Trim()
     throw "Collector lock already exists for PID $OwnerPid. Run status_live_collector.ps1."
 }
-if (-not (Test-Path -LiteralPath $TomTomKeyFile)) {
+if ($TomTomKeyFile -and -not (Test-Path -LiteralPath $TomTomKeyFile)) {
     throw "TomTom key file not found: $TomTomKeyFile"
+}
+if (-not $TomTomKeyFile -and -not $env:TOMTOM_API_KEY) {
+    throw "Set TOMTOM_API_KEY or pass -TomTomKeyFile with a key file path."
 }
 
 $Python = (Get-Command python).Source
@@ -28,10 +31,12 @@ if (-not (Test-Path -LiteralPath $Pythonw)) {
 $Arguments = @(
     "src\live\live_hourly_predictor.py",
     "run-forever",
-    "--tomtom-key-file", "`"$TomTomKeyFile`"",
     "--minute", $Minute,
     "--log-file", "`"$CollectorLog`""
 )
+if ($TomTomKeyFile) {
+    $Arguments += @("--tomtom-key-file", "`"$TomTomKeyFile`"")
+}
 if ($RunNow) {
     $Arguments += "--run-now"
 }

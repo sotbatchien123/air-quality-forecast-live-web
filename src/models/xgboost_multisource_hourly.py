@@ -1,3 +1,13 @@
+"""Train va du bao XGBoost multisource theo tung gio.
+
+Muc luc:
+1. Khai bao lag 1/2/3/6/12 gio va rolling window 3/6/12 gio.
+2. `build_hourly_frame()`: tao bang supervised cho muc tieu t+1h.
+3. `train()`: huong dan train artifact hourly production.
+4. `forecast_next_hour()`: du bao mot gio tiep theo tu history + weather.
+5. CLI: `train` va `forecast-next-hour`.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -67,6 +77,7 @@ def build_hourly_frame(history: pd.DataFrame) -> pd.DataFrame:
         "target_timestamp": grouped["timestamp"].shift(-HORIZON_HOURS)
     }
 
+    # Gio dich la t+1h, nen weather forecast duoc shift ve dung target_timestamp.
     for column in WEATHER_COLUMNS:
         derived[f"forecast_{column}"] = grouped[column].shift(-HORIZON_HOURS)
 

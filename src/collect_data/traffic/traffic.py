@@ -1,21 +1,37 @@
+"""Thu thap traffic lich su tu TomTom.
+
+Muc luc:
+1. Doc API key tu bien moi truong, khong hardcode secret.
+2. Khai bao cac diem dai dien cua TP.HCM.
+3. Goi TomTom theo tung gio va tinh congestion/traffic density.
+4. Luu checkpoint CSV de tranh mat du lieu khi job dung giua chung.
+
+Bien moi truong:
+- `TOMTOM_API_KEYS`: nhieu key cach nhau bang dau phay, cham phay hoac xuong dong.
+- `TOMTOM_API_KEY`: mot key duy nhat neu khong dung danh sach.
+"""
+
 import requests
 import pandas as pd
 import os
 import threading
 
 from datetime import datetime, timedelta
-from itertools import cycle
 from concurrent.futures import ThreadPoolExecutor
 
 # =====================
 # CONFIG
 # =====================
 
-API_KEYS = [
-    "api_key_1",
-    "api_key_2",
-    "api_key_3",
-]
+def load_api_keys():
+    raw_keys = os.getenv("TOMTOM_API_KEYS") or os.getenv("TOMTOM_API_KEY", "")
+    separators = [",", ";", "\n"]
+    for separator in separators[1:]:
+        raw_keys = raw_keys.replace(separator, separators[0])
+    return [key.strip() for key in raw_keys.split(separators[0]) if key.strip()]
+
+
+API_KEYS = load_api_keys()
 
 
 OUTPUT_FILE = "data/raw/traffic/traffic_data2025_part3.csv"

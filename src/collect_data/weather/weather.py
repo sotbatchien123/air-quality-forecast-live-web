@@ -1,3 +1,14 @@
+"""Script weather don gian cho TP.HCM nam 2025.
+
+Muc luc:
+1. Khai bao toa do, khoang ngay va cot weather can lay.
+2. Goi Open-Meteo Archive API.
+3. Chuan hoa thanh CSV co `date`, `hour`, `location_name`, `lat`, `lon`.
+
+Neu can chay linh hoat theo tham so, uu tien dung
+`collect_open_meteo_weather.py`.
+"""
+
 import requests
 import pandas as pd
 

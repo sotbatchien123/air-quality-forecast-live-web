@@ -1,3 +1,16 @@
+"""Thu thap du lieu live va du bao AQI/traffic theo gio.
+
+Muc luc:
+1. Khai bao API, file live, model artifact va nhom cot feature.
+2. Lay weather/AQI/traffic tu Open-Meteo va TomTom.
+3. Ghi observation, tao feature inference va predict t+1h.
+4. Dong bo observation/prediction/model registry len TiDB neu co `.env`.
+5. CLI: chay mot lan, chay loop 24/24 hoac chi sync database.
+
+File nay la pipeline van hanh. Khi khong co du TomTom cho mot dia diem,
+script co co che fallback tu lich su gan nhat de job 24/24 khong bi dut.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -35,7 +48,9 @@ LOCATIONS_FILE = (
 )
 DEFAULT_OBSERVATIONS_FILE = ROOT_DIR / "data" / "live" / "hourly_observations.csv"
 DEFAULT_PREDICTIONS_DIR = ROOT_DIR / "data" / "live" / "predictions"
+DEFAULT_PREDICTIONS_FILE = ROOT_DIR / "data" / "live" / "hourly_predictions.csv"
 DEFAULT_LOCK_FILE = ROOT_DIR / "data" / "live" / "collector.lock"
+DATABASE_SYNC_LOOKBACK_HOURS = 72
 
 TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 WEATHER_API = "https://api.open-meteo.com/v1/forecast"
@@ -96,15 +111,19 @@ class ApiRequestError(RuntimeError):
         super().__init__(f"{source}: {reason}")
 
 
-def add_models_path() -> None:
-    import sys
+def add_source_paths() -> None:
+    for source_path in (ROOT_DIR / "src", ROOT_DIR / "src" / "models"):
+        path = str(source_path)
+        if path not in sys.path:
+            sys.path.insert(0, path)
 
-    models_path = str(ROOT_DIR / "src" / "models")
-    if models_path not in sys.path:
-        sys.path.insert(0, models_path)
 
-
-add_models_path()
+add_source_paths()
+from database.live_database import (  # noqa: E402
+    LiveDatabase,
+    database_sync_required,
+    model_version,
+)
 from next_day_traffic_aqi import (  # noqa: E402
     add_periodic_features,
     clip_predictions,
@@ -465,9 +484,16 @@ def predict(
     inference: pd.DataFrame,
     bundle: dict[str, Any],
     output_file: Path,
+    version: str,
 ) -> pd.DataFrame:
     result = inference[
-        ["target_timestamp", "province_key", "district_key", "district"]
+        [
+            "target_timestamp",
+            "location_key",
+            "province_key",
+            "district_key",
+            "district",
+        ]
     ].copy()
     feature_map = bundle.get("feature_columns_by_target", {})
     for target, model in bundle["models"].items():
@@ -476,10 +502,75 @@ def predict(
             target,
             model.predict(inference[features]),
         )
+    result["generated_at"] = datetime.now(TIMEZONE).isoformat()
+    result["model_version"] = version
     result = result.sort_values(["province_key", "district_key"])
     output_file.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output_file, index=False, encoding="utf-8-sig")
     return result
+
+
+def upsert_predictions(new_rows: pd.DataFrame, output_file: Path) -> pd.DataFrame:
+    if output_file.exists():
+        existing = pd.read_csv(output_file, encoding="utf-8-sig")
+        combined = pd.concat([existing, new_rows], ignore_index=True)
+    else:
+        combined = new_rows.copy()
+    combined["target_timestamp"] = pd.to_datetime(
+        combined["target_timestamp"], errors="raise"
+    )
+    combined = combined.sort_values("generated_at").drop_duplicates(
+        ["target_timestamp", "location_key", "model_version"],
+        keep="last",
+    )
+    combined = combined.sort_values(
+        ["target_timestamp", "province_key", "district_key"]
+    )
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(output_file, index=False, encoding="utf-8-sig")
+    return combined
+
+
+def configured_database() -> LiveDatabase | None:
+    return LiveDatabase.from_environment(required=False)
+
+
+def verify_database(database: LiveDatabase) -> dict[str, object]:
+    status = database.healthcheck()
+    if status["live_table_count"] != 5:
+        raise RuntimeError(
+            "Live database schema is incomplete. Run: "
+            "python src\\database\\manage_live_database.py init-schema"
+        )
+    return status
+
+
+def sync_database_window(
+    database: LiveDatabase,
+    locations: pd.DataFrame,
+    bundle: dict[str, Any],
+    observations: pd.DataFrame,
+    predictions: pd.DataFrame,
+    current: pd.Timestamp,
+) -> tuple[int, int, str]:
+    version = database.register_model(bundle, MODEL_FILE)
+    location_rows = locations.copy()
+    location_rows["is_live_supported"] = ~location_rows["location_key"].isin(
+        TOMTOM_UNSUPPORTED_LOCATIONS
+    )
+    database.upsert_locations(location_rows)
+
+    start = current - pd.Timedelta(hours=DATABASE_SYNC_LOOKBACK_HOURS)
+    recent_observations = observations[observations["timestamp"] >= start]
+    observation_count = database.upsert_observations(recent_observations)
+
+    prediction_count = 0
+    if not predictions.empty:
+        recent_predictions = predictions[
+            predictions["target_timestamp"] >= start
+        ]
+        prediction_count = database.upsert_predictions(recent_predictions, version)
+    return observation_count, prediction_count, version
 
 
 def doctor(timestamp: str | None, key_file: Path | None) -> None:
@@ -498,6 +589,12 @@ def doctor(timestamp: str | None, key_file: Path | None) -> None:
         else None
     )
     has_key = bool(api_keys)
+    database = configured_database()
+    database_status = (
+        {"configured": True, **verify_database(database)}
+        if database is not None
+        else {"configured": False}
+    )
     print(
         json.dumps(
             {
@@ -515,6 +612,7 @@ def doctor(timestamp: str | None, key_file: Path | None) -> None:
                 "sample_traffic": sample_traffic,
                 "tomtom_api_key_configured": has_key,
                 "tomtom_key_count": len(api_keys),
+                "database": database_status,
             },
             ensure_ascii=False,
             indent=2,
@@ -526,35 +624,115 @@ def run(
     timestamp: str | None,
     observations_file: Path,
     predictions_dir: Path,
+    predictions_file: Path,
     key_file: Path | None,
 ) -> None:
     api_keys = load_tomtom_keys(key_file, required=True)
     current = local_hour(timestamp)
-    locations = load_locations()
-    locations = locations[
-        ~locations["location_key"].isin(TOMTOM_UNSUPPORTED_LOCATIONS)
+    all_locations = load_locations()
+    locations = all_locations[
+        ~all_locations["location_key"].isin(TOMTOM_UNSUPPORTED_LOCATIONS)
     ].reset_index(drop=True)
     bundle = joblib.load(MODEL_FILE)
-    rows, target_weather = collect_rows(locations, current, api_keys)
-    observations = upsert_observations(rows, observations_file)
-    print(f"Stored {len(rows):,} live observations for {current}")
+    version = model_version(bundle)
+    database = configured_database()
+    run_id: str | None = None
+    if database is not None:
+        try:
+            verify_database(database)
+            run_id = database.start_run(current, version)
+        except Exception as exc:
+            if database_sync_required():
+                raise
+            print(f"WARNING: database sync disabled for this run: {exc}")
+            database = None
 
-    inference = build_inference(observations, current, target_weather, bundle)
-    if inference is None:
-        available_hours = observations["timestamp"].nunique()
-        print(
-            f"Prediction not ready: {available_hours}/{REQUIRED_HISTORY_HOURS} "
-            "distinct hourly snapshots "
-            "are available. Continue collecting once per hour."
+    observation_count = 0
+    prediction_count = 0
+    try:
+        rows, target_weather = collect_rows(locations, current, api_keys)
+        observations = upsert_observations(rows, observations_file)
+        observation_count = len(rows)
+        print(f"Stored {observation_count:,} live observations for {current}")
+
+        inference = build_inference(observations, current, target_weather, bundle)
+        if inference is None:
+            predictions = (
+                pd.read_csv(predictions_file, encoding="utf-8-sig")
+                if predictions_file.is_file()
+                else pd.DataFrame()
+            )
+            if not predictions.empty:
+                predictions["target_timestamp"] = pd.to_datetime(
+                    predictions["target_timestamp"], errors="raise"
+                )
+            if database is not None:
+                sync_database_window(
+                    database,
+                    all_locations,
+                    bundle,
+                    observations,
+                    predictions,
+                    current,
+                )
+                database.finish_run(
+                    run_id,
+                    "waiting_for_history",
+                    observation_count,
+                    0,
+                )
+            available_hours = observations["timestamp"].nunique()
+            print(
+                f"Prediction not ready: {available_hours}/{REQUIRED_HISTORY_HOURS} "
+                "distinct hourly snapshots are available. "
+                "Continue collecting once per hour."
+            )
+            return
+
+        target = current + pd.Timedelta(hours=1)
+        output_file = predictions_dir / (
+            f"traffic_aqi_live_forecast_{target:%Y-%m-%d_%H00}.csv"
         )
-        return
+        result = predict(inference, bundle, output_file, version)
+        prediction_count = len(result)
+        predictions = upsert_predictions(result, predictions_file)
+        print(f"Saved {prediction_count:,} live forecasts to: {output_file}")
 
-    target = current + pd.Timedelta(hours=1)
-    output_file = predictions_dir / (
-        f"traffic_aqi_live_forecast_{target:%Y-%m-%d_%H00}.csv"
-    )
-    result = predict(inference, bundle, output_file)
-    print(f"Saved {len(result):,} live forecasts to: {output_file}")
+        if database is not None:
+            synced_observations, synced_predictions, _ = sync_database_window(
+                database,
+                all_locations,
+                bundle,
+                observations,
+                predictions,
+                current,
+            )
+            database.finish_run(
+                run_id,
+                "success",
+                observation_count,
+                prediction_count,
+            )
+            print(
+                f"Database sync complete: observations={synced_observations:,}; "
+                f"predictions={synced_predictions:,}"
+            )
+    except Exception as exc:
+        if database is not None and run_id is not None:
+            try:
+                database.finish_run(
+                    run_id,
+                    "failed",
+                    observation_count,
+                    prediction_count,
+                    str(exc),
+                )
+            except Exception as finish_error:
+                print(
+                    f"WARNING: could not update failed collector run: {finish_error}",
+                    file=sys.stderr,
+                )
+        raise
 
 
 def acquire_lock(lock_file: Path) -> None:
@@ -594,6 +772,7 @@ def run_forever(
     key_file: Path | None,
     observations_file: Path,
     predictions_dir: Path,
+    predictions_file: Path,
     lock_file: Path,
     minute: int,
     run_now: bool,
@@ -640,6 +819,7 @@ def run_forever(
                         None,
                         observations_file,
                         predictions_dir,
+                        predictions_file,
                         key_file,
                     )
                     break
@@ -690,6 +870,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_PREDICTIONS_DIR,
     )
+    run_parser.add_argument(
+        "--predictions-file",
+        type=Path,
+        default=DEFAULT_PREDICTIONS_FILE,
+    )
 
     forever_parser = subparsers.add_parser("run-forever")
     forever_parser.add_argument("--tomtom-key-file", type=Path)
@@ -702,6 +887,11 @@ def parse_args() -> argparse.Namespace:
         "--predictions-dir",
         type=Path,
         default=DEFAULT_PREDICTIONS_DIR,
+    )
+    forever_parser.add_argument(
+        "--predictions-file",
+        type=Path,
+        default=DEFAULT_PREDICTIONS_FILE,
     )
     forever_parser.add_argument("--lock-file", type=Path, default=DEFAULT_LOCK_FILE)
     forever_parser.add_argument("--minute", type=int, default=5)
@@ -724,6 +914,7 @@ if __name__ == "__main__":
                 args.timestamp,
                 args.observations_file.resolve(),
                 args.predictions_dir.resolve(),
+                args.predictions_file.resolve(),
                 key_file,
             )
         else:
@@ -732,6 +923,7 @@ if __name__ == "__main__":
                 key_file,
                 args.observations_file.resolve(),
                 args.predictions_dir.resolve(),
+                args.predictions_file.resolve(),
                 args.lock_file.resolve(),
                 args.minute,
                 args.run_now,

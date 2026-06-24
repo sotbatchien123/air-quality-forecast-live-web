@@ -1,3 +1,11 @@
+"""Thu thap weather lich su tu Open-Meteo Archive API.
+
+Muc luc:
+1. Khai bao toa do TP.HCM, timezone va cac cot hourly can tai.
+2. `collect_weather()`: goi API, chuan hoa date/hour va kiem tra du so dong.
+3. CLI: truyen `--start-date`, `--end-date`, `--output-file`.
+"""
+
 from __future__ import annotations
 
 import argparse

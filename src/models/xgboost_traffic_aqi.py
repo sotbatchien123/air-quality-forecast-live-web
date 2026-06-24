@@ -1,3 +1,13 @@
+"""Train cac bien the XGBoost next-day va weather-only.
+
+Muc luc:
+1. Tao XGBRegressor va ham tinh feature importance.
+2. `train_variant()`: chia tap theo thoi gian, early stopping, luu artifact.
+3. `train_all()`: train XGBoost next-day 43 feature va weather-only 19 feature.
+4. `forecast_weather_period()`: du bao nhieu ngay khi chi co file weather.
+5. CLI: `train-all` va `forecast-weather-period`.
+"""
+
 from __future__ import annotations
 
 import argparse

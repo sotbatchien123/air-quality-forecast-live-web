@@ -1,4 +1,6 @@
 .env
+secrets/
 __pycache__/
 *.pyc
 data/live/
+data/tidb_import/

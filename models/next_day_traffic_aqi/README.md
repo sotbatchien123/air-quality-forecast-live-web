@@ -22,8 +22,8 @@ giờ. Bộ 43 feature gồm:
 - Weather, traffic, AQI và pollutant tại `t-24h`.
 - Rolling mean/std 24 giờ của tốc độ, mật độ, US AQI và PM2.5.
 
-Model không dùng traffic hoặc AQI tại giờ đích và không dùng trực tiếp
-`pollution_index_scaled`.
+Model không dùng traffic hoặc AQI tại giờ đích; dữ liệu nền lấy từ
+`data/processed/model_features`.
 
 ### Holdout tháng 12/2025
 

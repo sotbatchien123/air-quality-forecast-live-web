@@ -1,3 +1,12 @@
+"""Danh gia forecast AQI TP.HCM thang 01/2026.
+
+Muc luc:
+1. Khai bao file forecast, file actual AQI va thu muc output.
+2. Tinh metric tong quan, theo ngay va theo quan/huyen.
+3. Ghep forecast voi AQI luu tru bang `target_timestamp + district_key`.
+4. Luu summary, actual-vs-predicted va bang confusion AQI category.
+"""
+
 from __future__ import annotations
 
 import argparse

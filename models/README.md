@@ -13,8 +13,8 @@ Mỗi model gồm ba regressor độc lập cho:
 - `target_us_aqi`.
 
 Giá trị dự báo được chặn ở `0` đối với tốc độ và AQI, và trong `[0, 1]` đối với
-mật độ giao thông. `pollution_index_scaled` được dùng trong pipeline chuẩn bị dữ
-liệu nhưng không được đưa trực tiếp vào feature của các model ở đây.
+mật độ giao thông. Dữ liệu nền của model nằm ở `data/processed/model_features`
+và chỉ gồm traffic, weather, vị trí, dân số, xe ước tính và cây xanh.
 
 ## Dữ liệu đầu vào
 

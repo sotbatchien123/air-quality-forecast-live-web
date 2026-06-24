@@ -1,3 +1,12 @@
+"""Train XGBoost multisource cho bai toan du bao sau 24 gio.
+
+Muc luc:
+1. Khai bao lag 24/48/72 gio va rolling window 24/48/72 gio.
+2. `build_multisource_frame()`: tao feature tu history da ghep.
+3. `train()`: goi `train_variant()` va luu artifact vao thu muc rieng.
+4. CLI: chon validation/test start va output dir.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -59,6 +68,7 @@ def build_multisource_frame(history: pd.DataFrame) -> pd.DataFrame:
         "target_timestamp": grouped["timestamp"].shift(-HORIZON_HOURS)
     }
 
+    # Forecast weather la thoi tiet tai gio dich, khong phai gia tri tai gio hien tai.
     for column in WEATHER_COLUMNS:
         derived[f"forecast_{column}"] = grouped[column].shift(-HORIZON_HOURS)
 

@@ -1,3 +1,17 @@
+"""Train, backtest va du bao next-day cho traffic/AQI.
+
+Muc luc:
+1. Khai bao duong dan, tinh/thanh va cac nhom cot feature.
+2. Chuan hoa ten dia diem va ghep traffic + weather + static + AQI.
+3. Tao supervised frame cho model next-day va weather-only.
+4. Train/evaluate/backtest, luu metric, metadata va model bundle.
+5. Du bao lich su, du bao ngay ke tiep va du bao theo file weather.
+
+File nay la diem vao du lieu chung cho cac model trong `src/models`.
+Du lieu dau vao chinh nam o `data/processed/model_features`, chi gom
+traffic, weather va du lieu tinh.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -34,7 +48,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-POLLUTION_DIR = ROOT_DIR / "data" / "processed" / "pollution_index_scaled"
+MODEL_FEATURE_DIR = ROOT_DIR / "data" / "processed" / "model_features"
 AQI_DIR = ROOT_DIR / "data" / "raw" / "AQI" / "open_meteo_aqi_2025_output"
 MODEL_DIR = ROOT_DIR / "models" / "next_day_traffic_aqi"
 
@@ -43,28 +57,29 @@ DEFAULT_TEST_START = "2025-12-01"
 
 PROVINCES = {
     "ba_ria_vung_tau": {
-        "pollution": "pollution_index_scaled_ba_ria_vung_tau_2025.csv",
+        "features": "traffic_weather_static_ba_ria_vung_tau_2025.csv",
         "aqi": "aqi_ba_ria_vung_tau_2025_open_meteo.csv",
     },
     "dong_nai": {
-        "pollution": "pollution_index_scaled_dong_nai_2025.csv",
+        "features": "traffic_weather_static_dong_nai_2025.csv",
         "aqi": "aqi_dong_nai_2025_open_meteo.csv",
     },
     "ho_chi_minh": {
-        "pollution": "pollution_index_scaled_ho_chi_minh_2025.csv",
+        "features": "traffic_weather_static_ho_chi_minh_2025.csv",
         "aqi": "aqi_ho_chi_minh_2025_open_meteo.csv",
     },
     "long_an": {
-        "pollution": "pollution_index_scaled_long_an_2025.csv",
+        "features": "traffic_weather_static_long_an_2025.csv",
         "aqi": "aqi_long_an_2025_open_meteo.csv",
     },
     "tay_ninh": {
-        "pollution": "pollution_index_scaled_tay_ninh_2025.csv",
+        "features": "traffic_weather_static_tay_ninh_2025.csv",
         "aqi": "aqi_tay_ninh_2025_open_meteo.csv",
     },
 }
 
-POLLUTION_COLUMNS = [
+# Cac cot nay la lop du lieu nen cho model: traffic + static + weather.
+MODEL_FEATURE_COLUMNS = [
     "date",
     "hour",
     "location_name",
@@ -209,15 +224,16 @@ def require_columns(frame: pd.DataFrame, columns: list[str], source: Path) -> No
 
 
 def load_joined_history() -> pd.DataFrame:
+    """Ghep feature nen va AQI lich su thanh bang training dung chung."""
     frames: list[pd.DataFrame] = []
 
     for province_key, files in PROVINCES.items():
-        pollution_path = POLLUTION_DIR / files["pollution"]
+        feature_path = MODEL_FEATURE_DIR / files["features"]
         aqi_path = AQI_DIR / files["aqi"]
 
-        pollution = pd.read_csv(
-            pollution_path,
-            usecols=POLLUTION_COLUMNS,
+        features = pd.read_csv(
+            feature_path,
+            usecols=MODEL_FEATURE_COLUMNS,
             encoding="utf-8-sig",
         )
         aqi = pd.read_csv(
@@ -225,29 +241,29 @@ def load_joined_history() -> pd.DataFrame:
             usecols=AQI_COLUMNS,
             encoding="utf-8-sig",
         )
-        require_columns(pollution, POLLUTION_COLUMNS, pollution_path)
+        require_columns(features, MODEL_FEATURE_COLUMNS, feature_path)
         require_columns(aqi, AQI_COLUMNS, aqi_path)
 
-        pollution["province_key"] = province_key
+        features["province_key"] = province_key
         aqi["district_key"] = aqi["location_name"].map(district_key)
 
         merge_columns = ["date", "hour", "district_key"]
-        if pollution.duplicated(merge_columns).any():
-            raise ValueError(f"Duplicate pollution keys in {pollution_path}")
+        if features.duplicated(merge_columns).any():
+            raise ValueError(f"Duplicate feature keys in {feature_path}")
         if aqi.duplicated(merge_columns).any():
             raise ValueError(f"Duplicate AQI keys in {aqi_path}")
 
         aqi = aqi.drop(columns="location_name")
-        joined = pollution.merge(
+        joined = features.merge(
             aqi,
             on=merge_columns,
             how="inner",
             validate="one_to_one",
         )
-        if len(joined) != len(pollution):
+        if len(joined) != len(features):
             raise ValueError(
                 f"Join lost rows for {province_key}: "
-                f"pollution={len(pollution)}, joined={len(joined)}"
+                f"features={len(features)}, joined={len(joined)}"
             )
 
         frames.append(joined)

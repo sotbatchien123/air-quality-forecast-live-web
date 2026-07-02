@@ -390,12 +390,22 @@ def collect_rows(
     return pd.DataFrame(rows), target_weather
 
 
+def drop_repeated_header_rows(frame: pd.DataFrame, marker_column: str) -> pd.DataFrame:
+    """Remove CSV header rows that were accidentally imported as data."""
+
+    if marker_column not in frame.columns:
+        return frame
+    marker = frame[marker_column].astype(str).str.strip().str.casefold()
+    return frame.loc[marker != marker_column.casefold()].copy()
+
+
 def upsert_observations(new_rows: pd.DataFrame, output_file: Path) -> pd.DataFrame:
     if output_file.exists():
         existing = pd.read_csv(output_file, encoding="utf-8-sig")
         combined = pd.concat([existing, new_rows], ignore_index=True)
     else:
         combined = new_rows.copy()
+    combined = drop_repeated_header_rows(combined, "timestamp")
     combined["timestamp"] = pd.to_datetime(combined["timestamp"], errors="raise")
     combined = combined.sort_values("collection_time").drop_duplicates(
         ["timestamp", "location_key"],
@@ -516,6 +526,7 @@ def upsert_predictions(new_rows: pd.DataFrame, output_file: Path) -> pd.DataFram
         combined = pd.concat([existing, new_rows], ignore_index=True)
     else:
         combined = new_rows.copy()
+    combined = drop_repeated_header_rows(combined, "target_timestamp")
     combined["target_timestamp"] = pd.to_datetime(
         combined["target_timestamp"], errors="raise"
     )

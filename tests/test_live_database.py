@@ -22,7 +22,10 @@ from database.live_database import (  # noqa: E402
     model_version,
     split_sql_statements,
 )
-from live.live_hourly_predictor import upsert_predictions  # noqa: E402
+from live.live_hourly_predictor import (  # noqa: E402
+    upsert_observations,
+    upsert_predictions,
+)
 
 
 class DatabaseConfigTests(unittest.TestCase):
@@ -79,6 +82,39 @@ class SchemaTests(unittest.TestCase):
 
 
 class PredictionFileTests(unittest.TestCase):
+    def test_upsert_observations_ignores_repeated_header_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "observations.csv"
+            existing = pd.DataFrame(
+                [
+                    {
+                        "timestamp": "timestamp",
+                        "collection_time": "collection_time",
+                        "location_key": "location_key",
+                    },
+                    {
+                        "timestamp": "2026-06-23 08:00:00",
+                        "collection_time": "2026-06-23T08:05:00+07:00",
+                        "location_key": "ho_chi_minh__quan_1",
+                    },
+                ]
+            )
+            existing.to_csv(output, index=False, encoding="utf-8-sig")
+            new_rows = pd.DataFrame(
+                [
+                    {
+                        "timestamp": "2026-06-23 09:00:00",
+                        "collection_time": "2026-06-23T09:05:00+07:00",
+                        "location_key": "ho_chi_minh__quan_1",
+                    }
+                ]
+            )
+
+            result = upsert_observations(new_rows, output)
+
+            self.assertEqual(len(result), 2)
+            self.assertNotIn("timestamp", result["timestamp"].astype(str).tolist())
+
     def test_upsert_replaces_same_model_location_and_hour(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "predictions.csv"

@@ -414,7 +414,13 @@ Mỗi lần chạy:
 
 ### GitHub Secrets cần tạo
 
-Vào GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret.
+Repo có thể để public 100%, web và file `web/data/dashboard.json` cũng public được.
+Riêng password TiDB và API key không nên commit vào repo, vì người khác có thể dùng chúng
+để ghi/xóa database hoặc dùng hết quota API. Cách đúng là để GitHub Actions đọc qua
+GitHub Secrets.
+
+Nếu muốn tạo thủ công: vào GitHub repo -> Settings -> Secrets and variables -> Actions ->
+New repository secret.
 
 | Secret | Ý nghĩa |
 |---|---|
@@ -426,6 +432,36 @@ Vào GitHub repo -> Settings -> Secrets and variables -> Actions -> New reposito
 | `DB_DATABASE` | Database, ví dụ `air_quality_forecast`. |
 | `DB_SSL_MODE` | Nên dùng `VERIFY_IDENTITY`. |
 | `DB_SSL_CA` | Có thể để trống nếu TiDB không yêu cầu CA file riêng. |
+
+### Tự động cấu hình Secrets, Pages và chạy workflow
+
+Project có script:
+
+```text
+scripts/configure_github_pages_actions.ps1
+```
+
+Script này đọc `.env` local, đẩy các biến cần thiết lên GitHub Secrets, bật GitHub Pages
+theo workflow, và có thể chạy workflow ngay. Script không in password/API key ra màn hình.
+
+Lần đầu cần cài GitHub CLI và login:
+
+```powershell
+winget install --id GitHub.cli -e
+gh auth login
+```
+
+Sau khi đã login, chạy từ root repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\configure_github_pages_actions.ps1 -RunWorkflow
+```
+
+Nếu chỉ muốn deploy web từ dữ liệu đang có trong TiDB, không gọi TomTom/Open-Meteo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\configure_github_pages_actions.ps1 -RunWorkflow -SkipCollection
+```
 
 ### Bật GitHub Pages
 

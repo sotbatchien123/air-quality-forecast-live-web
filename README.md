@@ -451,6 +451,12 @@ winget install --id GitHub.cli -e
 gh auth login
 ```
 
+Nếu vừa cài xong mà PowerShell hiện tại chưa nhận lệnh `gh`, mở PowerShell mới hoặc chạy:
+
+```powershell
+& "C:\Program Files\GitHub CLI\gh.exe" auth login
+```
+
 Sau khi đã login, chạy từ root repo:
 
 ```powershell

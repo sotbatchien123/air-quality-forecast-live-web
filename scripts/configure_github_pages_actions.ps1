@@ -11,6 +11,25 @@ $ErrorActionPreference = "Stop"
 # It uploads the values as GitHub Actions secrets, configures Pages, and can
 # trigger the hourly dashboard workflow once the GitHub CLI is authenticated.
 
+function Resolve-GhCommand {
+    $fromPath = Get-Command gh -ErrorAction SilentlyContinue
+    if ($fromPath) {
+        return $fromPath.Source
+    }
+
+    $candidates = @(
+        (Join-Path $env:ProgramFiles "GitHub CLI\gh.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "GitHub CLI\gh.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    throw "GitHub CLI 'gh' is not installed. Install it first: https://cli.github.com/"
+}
+
 function Invoke-Gh {
     param(
         [string[]]$Arguments,
@@ -18,10 +37,10 @@ function Invoke-Gh {
     )
 
     if ($PSBoundParameters.ContainsKey("InputText")) {
-        $InputText | & gh @Arguments
+        $InputText | & $script:GhCommand @Arguments
     }
     else {
-        & gh @Arguments
+        & $script:GhCommand @Arguments
     }
 
     if ($LASTEXITCODE -ne 0) {
@@ -85,10 +104,7 @@ function Write-FilteredSecretFile {
     return $temp
 }
 
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    throw "GitHub CLI 'gh' is not installed. Install it first: https://cli.github.com/"
-}
-
+$script:GhCommand = Resolve-GhCommand
 Invoke-Gh -Arguments @("auth", "status") | Out-Null
 
 $repo = Get-RepoSlug

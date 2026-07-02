@@ -2,8 +2,8 @@
 
 Muc luc:
 1. Ket noi TiDB bang bien moi truong/GitHub Secrets.
-2. Doc prediction moi nhat, observation moi nhat va run gan nhat.
-3. Tong hop KPI theo toan bo khu vuc va theo tinh/thanh.
+2. Doc prediction hourly gan nhat, observation moi nhat va run gan nhat.
+3. Tong hop KPI theo tung gio du bao, toan bo khu vuc va tinh/thanh.
 4. Ghi `web/data/dashboard.json` de frontend tinh doc truc tiep.
 
 Script nay chi chay o backend/Actions. Frontend khong ket noi truc tiep TiDB
@@ -35,6 +35,7 @@ from database.live_database import DatabaseConfigError, LiveDatabase  # noqa: E4
 
 
 DEFAULT_OUTPUT = ROOT_DIR / "web" / "data" / "dashboard.json"
+DEFAULT_HOURLY_LIMIT = 24
 
 
 def as_json_value(value: Any) -> Any:
@@ -98,13 +99,26 @@ def fetch_table_counts(cursor) -> dict[str, int]:
     return counts
 
 
-def fetch_latest_predictions(cursor) -> list[dict[str, Any]]:
-    cursor.execute("SELECT MAX(target_at) AS target_at FROM live_hourly_predictions")
-    latest = cursor.fetchone()["target_at"]
-    if latest is None:
-        return []
+def fetch_recent_target_hours(cursor, limit: int = DEFAULT_HOURLY_LIMIT) -> list[Any]:
     cursor.execute(
         """
+        SELECT target_at
+        FROM live_hourly_predictions
+        GROUP BY target_at
+        ORDER BY target_at DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [row["target_at"] for row in cursor.fetchall()]
+
+
+def fetch_predictions_for_targets(cursor, target_hours: list[Any]) -> list[dict[str, Any]]:
+    if not target_hours:
+        return []
+    placeholders = ", ".join(["%s"] * len(target_hours))
+    cursor.execute(
+        f"""
         SELECT
             p.location_key,
             p.target_at,
@@ -122,22 +136,27 @@ def fetch_latest_predictions(cursor) -> list[dict[str, Any]]:
         FROM live_hourly_predictions p
         JOIN model_locations l ON l.location_key = p.location_key
         JOIN (
-            SELECT location_key, MAX(generated_at) AS generated_at
+            SELECT location_key, target_at, MAX(generated_at) AS generated_at
             FROM live_hourly_predictions
-            WHERE target_at = %s
-            GROUP BY location_key
+            WHERE target_at IN ({placeholders})
+            GROUP BY location_key, target_at
         ) latest
           ON latest.location_key = p.location_key
+         AND latest.target_at = p.target_at
          AND latest.generated_at = p.generated_at
-        WHERE p.target_at = %s
-        ORDER BY l.province_key, l.display_name
+        ORDER BY p.target_at DESC, l.province_key, l.display_name
         """,
-        (latest, latest),
+        tuple(target_hours),
     )
     rows = [clean_row(row) for row in cursor.fetchall()]
     for row in rows:
         row["aqi_category"] = aqi_category(row.get("predicted_us_aqi"))
     return rows
+
+
+def fetch_latest_predictions(cursor) -> list[dict[str, Any]]:
+    target_hours = fetch_recent_target_hours(cursor, limit=1)
+    return fetch_predictions_for_targets(cursor, target_hours)
 
 
 def fetch_latest_observations(cursor) -> list[dict[str, Any]]:
@@ -257,11 +276,48 @@ def province_summary(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return output
 
 
+def summarize_predictions(predictions: list[dict[str, Any]]) -> dict[str, Any]:
+    category_counts = Counter(row["aqi_category"] for row in predictions)
+    return {
+        "prediction_count": len(predictions),
+        "avg_predicted_us_aqi": average(predictions, "predicted_us_aqi"),
+        "max_predicted_us_aqi": maximum(predictions, "predicted_us_aqi"),
+        "avg_predicted_currentspeed": average(
+            predictions,
+            "predicted_currentspeed",
+        ),
+        "avg_predicted_traffic_density": average(
+            predictions,
+            "predicted_traffic_density",
+        ),
+        "aqi_category_counts": dict(sorted(category_counts.items())),
+    }
+
+
+def hourly_summary(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in predictions:
+        groups[str(row.get("target_at"))].append(row)
+
+    output: list[dict[str, Any]] = []
+    for target_at, rows in sorted(groups.items(), reverse=True):
+        summary = summarize_predictions(rows)
+        output.append(
+            {
+                "target_at": target_at,
+                **summary,
+                "provinces": province_summary(rows),
+            }
+        )
+    return output
+
+
 def build_payload(database: LiveDatabase) -> dict[str, Any]:
     connection = database.connect()
     try:
         with connection.cursor() as cursor:
-            predictions = fetch_latest_predictions(cursor)
+            target_hours = fetch_recent_target_hours(cursor)
+            hourly_predictions = fetch_predictions_for_targets(cursor, target_hours)
             observations = fetch_latest_observations(cursor)
             runs = fetch_runs(cursor)
             models = fetch_models(cursor)
@@ -269,9 +325,15 @@ def build_payload(database: LiveDatabase) -> dict[str, Any]:
     finally:
         connection.close()
 
-    category_counts = Counter(row["aqi_category"] for row in predictions)
+    hourly_forecasts = hourly_summary(hourly_predictions)
+    latest_target_at = hourly_forecasts[0]["target_at"] if hourly_forecasts else None
+    predictions = [
+        row for row in hourly_predictions if str(row.get("target_at")) == latest_target_at
+    ]
     latest_prediction = predictions[0] if predictions else {}
     latest_observation = observations[0] if observations else {}
+    summary = summarize_predictions(predictions)
+    summary["observation_count"] = len(observations)
     return {
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "status": "ready" if predictions else "waiting_for_predictions",
@@ -279,21 +341,9 @@ def build_payload(database: LiveDatabase) -> dict[str, Any]:
         "latest_target_at": latest_prediction.get("target_at"),
         "latest_observed_at": latest_observation.get("observed_at"),
         "latest_model_version": latest_prediction.get("model_version"),
-        "summary": {
-            "prediction_count": len(predictions),
-            "observation_count": len(observations),
-            "avg_predicted_us_aqi": average(predictions, "predicted_us_aqi"),
-            "max_predicted_us_aqi": maximum(predictions, "predicted_us_aqi"),
-            "avg_predicted_currentspeed": average(
-                predictions,
-                "predicted_currentspeed",
-            ),
-            "avg_predicted_traffic_density": average(
-                predictions,
-                "predicted_traffic_density",
-            ),
-            "aqi_category_counts": dict(sorted(category_counts.items())),
-        },
+        "summary": summary,
+        "hourly_forecasts": hourly_forecasts,
+        "hourly_predictions": hourly_predictions,
         "provinces": province_summary(predictions),
         "predictions": predictions,
         "observations": observations,

@@ -23,6 +23,7 @@ from database.live_database import (  # noqa: E402
     split_sql_statements,
 )
 from live.live_hourly_predictor import (  # noqa: E402
+    filter_observations_for_locations,
     upsert_observations,
     upsert_predictions,
 )
@@ -82,6 +83,19 @@ class SchemaTests(unittest.TestCase):
 
 
 class PredictionFileTests(unittest.TestCase):
+    def test_filter_observations_keeps_supported_locations_only(self) -> None:
+        observations = pd.DataFrame(
+            [
+                {"location_key": "supported", "timestamp": "2026-06-23 08:00:00"},
+                {"location_key": "unsupported", "timestamp": "2026-06-23 08:00:00"},
+            ]
+        )
+        locations = pd.DataFrame([{"location_key": "supported"}])
+
+        result = filter_observations_for_locations(observations, locations)
+
+        self.assertEqual(result["location_key"].tolist(), ["supported"])
+
     def test_upsert_observations_ignores_repeated_header_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "observations.csv"

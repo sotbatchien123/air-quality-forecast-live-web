@@ -399,6 +399,17 @@ def drop_repeated_header_rows(frame: pd.DataFrame, marker_column: str) -> pd.Dat
     return frame.loc[marker != marker_column.casefold()].copy()
 
 
+def filter_observations_for_locations(
+    observations: pd.DataFrame,
+    locations: pd.DataFrame,
+) -> pd.DataFrame:
+    """Keep only locations that the live hourly model can score in this run."""
+
+    supported_keys = set(locations["location_key"].astype(str))
+    mask = observations["location_key"].astype(str).isin(supported_keys)
+    return observations.loc[mask].copy()
+
+
 def upsert_observations(new_rows: pd.DataFrame, output_file: Path) -> pd.DataFrame:
     if output_file.exists():
         existing = pd.read_csv(output_file, encoding="utf-8-sig")
@@ -663,10 +674,11 @@ def run(
     try:
         rows, target_weather = collect_rows(locations, current, api_keys)
         observations = upsert_observations(rows, observations_file)
+        scoring_observations = filter_observations_for_locations(observations, locations)
         observation_count = len(rows)
         print(f"Stored {observation_count:,} live observations for {current}")
 
-        inference = build_inference(observations, current, target_weather, bundle)
+        inference = build_inference(scoring_observations, current, target_weather, bundle)
         if inference is None:
             predictions = (
                 pd.read_csv(predictions_file, encoding="utf-8-sig")
@@ -692,7 +704,7 @@ def run(
                     observation_count,
                     0,
                 )
-            available_hours = observations["timestamp"].nunique()
+            available_hours = scoring_observations["timestamp"].nunique()
             print(
                 f"Prediction not ready: {available_hours}/{REQUIRED_HISTORY_HOURS} "
                 "distinct hourly snapshots are available. "

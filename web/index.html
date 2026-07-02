@@ -68,6 +68,17 @@
       <section class="panel">
         <div class="panel-heading">
           <div>
+            <p class="eyebrow">Hourly Model</p>
+            <h2>Dự báo từng giờ từ model hourly</h2>
+          </div>
+          <span class="muted">Mỗi GitHub Actions run sinh dự báo cho giờ kế tiếp</span>
+        </div>
+        <div id="hourlyForecastGrid" class="hour-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
             <p class="eyebrow">Province Summary</p>
             <h2>Tổng hợp theo tỉnh/thành</h2>
           </div>
@@ -101,6 +112,7 @@
           <div>
             <p class="eyebrow">Predictions</p>
             <h2>Dự báo từng địa điểm</h2>
+            <span id="selectedTargetLabel" class="muted">--</span>
           </div>
           <div class="filters">
             <select id="provinceFilter" aria-label="Lọc theo tỉnh/thành">

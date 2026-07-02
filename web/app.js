@@ -9,6 +9,7 @@ const provinceNames = {
 };
 
 let dashboard = null;
+let selectedTargetAt = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,13 +50,48 @@ function categoryClass(category) {
   return category.split(" ")[0];
 }
 
+function targetKey(value) {
+  return value ? String(value) : "";
+}
+
+function getHourlyForecasts(data = dashboard) {
+  return data?.hourly_forecasts || [];
+}
+
+function ensureSelectedTarget(data) {
+  const forecasts = getHourlyForecasts(data);
+  if (!forecasts.length) {
+    selectedTargetAt = data.latest_target_at || null;
+    return;
+  }
+  const keys = forecasts.map((row) => targetKey(row.target_at));
+  if (!selectedTargetAt || !keys.includes(targetKey(selectedTargetAt))) {
+    selectedTargetAt = forecasts[0].target_at;
+  }
+}
+
+function selectedForecast(data = dashboard) {
+  return getHourlyForecasts(data).find(
+    (row) => targetKey(row.target_at) === targetKey(selectedTargetAt),
+  );
+}
+
+function predictionsForSelectedHour() {
+  const allRows = dashboard.hourly_predictions || dashboard.predictions || [];
+  if (!selectedTargetAt) return dashboard.predictions || [];
+  return allRows.filter(
+    (row) => targetKey(row.target_at) === targetKey(selectedTargetAt),
+  );
+}
+
 function setStatus(data) {
   const dot = $("statusDot");
   const statusText = $("statusText");
   dot.className = "status-dot";
   if (data.status === "ready") {
     dot.classList.add("ready");
-    statusText.textContent = "Dữ liệu prediction mới nhất đã sẵn sàng";
+    statusText.textContent =
+      "Model hourly đang cập nhật prediction từng giờ qua GitHub Actions";
   } else if (data.status === "waiting_for_github_actions") {
     statusText.textContent = "Đang chờ GitHub Actions sinh dữ liệu lần đầu";
   } else {
@@ -64,8 +100,10 @@ function setStatus(data) {
 }
 
 function renderKpis(data) {
-  const summary = data.summary || {};
-  $("latestTarget").textContent = formatDateTime(data.latest_target_at);
+  const forecast = selectedForecast(data);
+  const summary = forecast || data.summary || {};
+  const targetAt = forecast?.target_at || selectedTargetAt || data.latest_target_at;
+  $("latestTarget").textContent = formatDateTime(targetAt);
   $("generatedAt").textContent = `Generated: ${formatDateTime(data.generated_at)}`;
   $("latestObserved").textContent = `Observed: ${formatDateTime(data.latest_observed_at)}`;
   $("avgAqi").textContent = formatNumber(summary.avg_predicted_us_aqi, 1);
@@ -73,6 +111,38 @@ function renderKpis(data) {
   $("avgSpeed").textContent = formatNumber(summary.avg_predicted_currentspeed, 1);
   $("predictionCount").textContent = formatNumber(summary.prediction_count, 0);
   $("maxAqiNote").textContent = "US AQI";
+  $("selectedTargetLabel").textContent = `Đang xem: ${formatDateTime(targetAt)}`;
+}
+
+function renderHourlyForecasts(data) {
+  const container = $("hourlyForecastGrid");
+  const forecasts = getHourlyForecasts(data);
+  if (!forecasts.length) {
+    container.innerHTML = `<p class="muted">Chưa có lịch sử prediction hourly trong TiDB.</p>`;
+    return;
+  }
+  container.innerHTML = forecasts
+    .map((row) => {
+      const active = targetKey(row.target_at) === targetKey(selectedTargetAt);
+      return `
+        <button class="hour-card ${active ? "active" : ""}" data-target="${row.target_at}">
+          <span class="label">${formatDateTime(row.target_at)}</span>
+          <strong>${formatNumber(row.avg_predicted_us_aqi, 1)} AQI</strong>
+          <small>${formatNumber(row.prediction_count, 0)} địa điểm · max ${formatNumber(
+            row.max_predicted_us_aqi,
+            1,
+          )}</small>
+        </button>
+      `;
+    })
+    .join("");
+
+  container.querySelectorAll("[data-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedTargetAt = button.getAttribute("data-target");
+      render(dashboard);
+    });
+  });
 }
 
 function renderProvinceOptions(predictions) {
@@ -91,7 +161,7 @@ function renderProvinceOptions(predictions) {
 
 function renderProvinces(data) {
   const grid = $("provinceGrid");
-  const provinces = data.provinces || [];
+  const provinces = selectedForecast(data)?.provinces || data.provinces || [];
   if (!provinces.length) {
     grid.innerHTML = `<p class="muted">Chưa có dữ liệu prediction theo tỉnh/thành.</p>`;
     return;
@@ -116,7 +186,8 @@ function renderProvinces(data) {
 
 function renderCategoryBars(data) {
   const container = $("categoryBars");
-  const counts = data.summary?.aqi_category_counts || {};
+  const counts =
+    selectedForecast(data)?.aqi_category_counts || data.summary?.aqi_category_counts || {};
   const entries = Object.entries(counts);
   const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
   if (!entries.length || total === 0) {
@@ -162,7 +233,7 @@ function renderRunStatus(data) {
 function filteredPredictions() {
   const province = $("provinceFilter").value;
   const query = $("searchInput").value.trim().toLowerCase();
-  return (dashboard.predictions || [])
+  return predictionsForSelectedHour()
     .filter((row) => province === "all" || row.province_key === province)
     .filter((row) => {
       const text = `${row.display_name || ""} ${row.district_key || ""}`.toLowerCase();
@@ -250,9 +321,11 @@ function renderModelInfo(data) {
 
 function render(data) {
   dashboard = data;
+  ensureSelectedTarget(data);
   setStatus(data);
+  renderHourlyForecasts(data);
   renderKpis(data);
-  renderProvinceOptions(data.predictions || []);
+  renderProvinceOptions(predictionsForSelectedHour());
   renderProvinces(data);
   renderCategoryBars(data);
   renderRunStatus(data);

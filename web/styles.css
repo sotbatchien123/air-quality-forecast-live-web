@@ -211,12 +211,42 @@ small {
 }
 
 .province-card,
+.hour-card,
 .run-card,
 .model-info {
   border: 1px solid var(--border);
   border-radius: 20px;
   background: rgba(15, 23, 42, 0.48);
   padding: 18px;
+}
+
+.hour-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.hour-card {
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.hour-card:hover,
+.hour-card.active {
+  border-color: rgba(56, 189, 248, 0.78);
+  background: rgba(56, 189, 248, 0.14);
+  transform: translateY(-1px);
+}
+
+.hour-card strong {
+  display: block;
+  margin: 6px 0 4px;
+  font-size: 1.35rem;
 }
 
 .province-card strong {

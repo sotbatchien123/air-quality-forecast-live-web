@@ -412,6 +412,17 @@ Mỗi lần chạy:
 8. Deploy thư mục web/ lên GitHub Pages
 ```
 
+Dashboard trên GitHub Pages hiển thị theo model hourly:
+
+```text
+Mỗi giờ GitHub Actions chạy 1 lần
+  -> lấy observation live mới
+  -> model hourly dự báo target_at = giờ hiện tại + 1
+  -> upsert prediction vào TiDB
+  -> export 24 giờ dự báo gần nhất vào dashboard.json
+  -> web có timeline để chọn từng giờ dự báo
+```
+
 ### GitHub Secrets cần tạo
 
 Repo có thể để public 100%, web và file `web/data/dashboard.json` cũng public được.

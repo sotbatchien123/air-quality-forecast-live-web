@@ -334,9 +334,13 @@ def build_payload(database: LiveDatabase) -> dict[str, Any]:
     latest_observation = observations[0] if observations else {}
     summary = summarize_predictions(predictions)
     summary["observation_count"] = len(observations)
+    latest_run_status = runs[0].get("status") if runs else None
+    status = "ready" if predictions else "waiting_for_predictions"
+    if latest_run_status == "waiting_for_history":
+        status = "warming_up_live_history"
     return {
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "status": "ready" if predictions else "waiting_for_predictions",
+        "status": status,
         "counts": counts,
         "latest_target_at": latest_prediction.get("target_at"),
         "latest_observed_at": latest_observation.get("observed_at"),

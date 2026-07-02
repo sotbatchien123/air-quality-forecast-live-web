@@ -92,6 +92,9 @@ function setStatus(data) {
     dot.classList.add("ready");
     statusText.textContent =
       "Model hourly đang cập nhật prediction từng giờ qua GitHub Actions";
+  } else if (data.status === "warming_up_live_history") {
+    statusText.textContent =
+      "Model hourly đang gom lại 12 giờ live history trước khi sinh prediction mới";
   } else if (data.status === "waiting_for_github_actions") {
     statusText.textContent = "Đang chờ GitHub Actions sinh dữ liệu lần đầu";
   } else {

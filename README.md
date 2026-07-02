@@ -423,6 +423,11 @@ Mỗi giờ GitHub Actions chạy 1 lần
   -> web có timeline để chọn từng giờ dự báo
 ```
 
+Lưu ý: nếu collector bị tắt nhiều giờ/ngày, model hourly cần gom lại đủ 12 giờ
+live history liên tục để tạo lag/rolling trước khi sinh prediction mới. Trong thời gian
+warm-up, web vẫn deploy, vẫn hiển thị các prediction hourly gần nhất đã có trong TiDB,
+và trạng thái sẽ báo đang gom live history.
+
 ### GitHub Secrets cần tạo
 
 Repo có thể để public 100%, web và file `web/data/dashboard.json` cũng public được.

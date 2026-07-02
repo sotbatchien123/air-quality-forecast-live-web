@@ -130,20 +130,30 @@ finally {
 
 $body = '{"build_type":"workflow"}'
 $pagesCreated = $false
+$pagesConfigured = $false
 try {
-    Invoke-Gh -Arguments @("api", "--repo", $repo, "--method", "POST", "repos/$repo/pages", "--input", "-") -InputText $body | Out-Null
+    Invoke-Gh -Arguments @("api", "--method", "POST", "repos/$repo/pages", "--input", "-") -InputText $body | Out-Null
     $pagesCreated = $true
+    $pagesConfigured = $true
 }
 catch {
-    Invoke-Gh -Arguments @("api", "--repo", $repo, "--method", "PUT", "repos/$repo/pages", "--input", "-") -InputText $body | Out-Null
+    try {
+        Invoke-Gh -Arguments @("api", "--method", "PUT", "repos/$repo/pages", "--input", "-") -InputText $body | Out-Null
+        $pagesConfigured = $true
+    }
+    catch {
+        Write-Warning "Could not configure GitHub Pages via API. The current GitHub account may need admin access to the repository. Secrets are still configured, and the workflow can still be triggered."
+    }
 }
 
 Write-Output "Configured GitHub Secrets for $repo."
-if ($pagesCreated) {
-    Write-Output "Created GitHub Pages site with workflow deployment."
-}
-else {
-    Write-Output "Updated GitHub Pages site to use workflow deployment."
+if ($pagesConfigured) {
+    if ($pagesCreated) {
+        Write-Output "Created GitHub Pages site with workflow deployment."
+    }
+    else {
+        Write-Output "Updated GitHub Pages site to use workflow deployment."
+    }
 }
 
 if ($RunWorkflow) {

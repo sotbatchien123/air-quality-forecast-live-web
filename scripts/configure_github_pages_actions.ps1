@@ -49,11 +49,17 @@ function Invoke-Gh {
 }
 
 function Get-RepoSlug {
-    $remote = (git remote get-url origin).Trim()
+    $remoteName = "origin"
+    $upstream = (git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $upstream -match "^(?<remote>[^/]+)/.+$") {
+        $remoteName = $Matches.remote
+    }
+
+    $remote = (git remote get-url $remoteName).Trim()
     if ($remote -match "github\.com[:/](?<owner>[^/]+)/(?<repo>[^/.]+)(\.git)?$") {
         return "$($Matches.owner)/$($Matches.repo)"
     }
-    throw "Cannot parse GitHub owner/repo from origin remote: $remote"
+    throw "Cannot parse GitHub owner/repo from $remoteName remote: $remote"
 }
 
 function Read-DotEnv {

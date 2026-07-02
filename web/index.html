@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DAP391 Air Quality Forecast</title>
+    <meta
+      name="description"
+      content="Dashboard dự báo AQI và giao thông theo giờ cho 5 tỉnh/thành Đông Nam Bộ."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="topbar">
+        <div>
+          <p class="eyebrow">DAP391m</p>
+          <h1>Air Quality Forecast</h1>
+        </div>
+        <a class="repo-link" href="https://github.com/superzeku/DAP391m_Air-Quality-Forecast">
+          GitHub repo
+        </a>
+      </nav>
+
+      <section class="hero-grid">
+        <div class="hero-copy">
+          <p class="tagline">
+            Dashboard tĩnh từ GitHub Pages, dữ liệu được cập nhật bởi GitHub
+            Actions và đồng bộ qua TiDB Cloud.
+          </p>
+          <div class="status-line">
+            <span id="statusDot" class="status-dot"></span>
+            <span id="statusText">Đang tải dữ liệu...</span>
+          </div>
+        </div>
+        <div class="hero-card">
+          <span class="label">Giờ dự báo mới nhất</span>
+          <strong id="latestTarget">--</strong>
+          <span id="generatedAt" class="muted">Generated: --</span>
+        </div>
+      </section>
+    </header>
+
+    <main class="layout">
+      <section class="cards" aria-label="Tổng quan">
+        <article class="metric-card">
+          <span class="label">AQI dự báo trung bình</span>
+          <strong id="avgAqi">--</strong>
+          <small>US AQI</small>
+        </article>
+        <article class="metric-card">
+          <span class="label">AQI dự báo cao nhất</span>
+          <strong id="maxAqi">--</strong>
+          <small id="maxAqiNote">--</small>
+        </article>
+        <article class="metric-card">
+          <span class="label">Tốc độ trung bình</span>
+          <strong id="avgSpeed">--</strong>
+          <small>km/h</small>
+        </article>
+        <article class="metric-card">
+          <span class="label">Địa điểm có prediction</span>
+          <strong id="predictionCount">--</strong>
+          <small>location-hour</small>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Province Summary</p>
+            <h2>Tổng hợp theo tỉnh/thành</h2>
+          </div>
+        </div>
+        <div id="provinceGrid" class="province-grid"></div>
+      </section>
+
+      <section class="panel split">
+        <div>
+          <div class="panel-heading compact">
+            <div>
+              <p class="eyebrow">AQI Categories</p>
+              <h2>Phân bố nhóm AQI</h2>
+            </div>
+          </div>
+          <div id="categoryBars" class="bar-list"></div>
+        </div>
+        <div>
+          <div class="panel-heading compact">
+            <div>
+              <p class="eyebrow">Collector</p>
+              <h2>Lần chạy gần nhất</h2>
+            </div>
+          </div>
+          <div id="runStatus" class="run-card"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Predictions</p>
+            <h2>Dự báo từng địa điểm</h2>
+          </div>
+          <div class="filters">
+            <select id="provinceFilter" aria-label="Lọc theo tỉnh/thành">
+              <option value="all">Tất cả tỉnh/thành</option>
+            </select>
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="Tìm quận/huyện..."
+              aria-label="Tìm quận/huyện"
+            />
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Địa điểm</th>
+                <th>Tỉnh/thành</th>
+                <th>AQI dự báo</th>
+                <th>Nhóm AQI</th>
+                <th>Tốc độ</th>
+                <th>Mật độ</th>
+              </tr>
+            </thead>
+            <tbody id="predictionRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Latest Observations</p>
+            <h2>Quan sát mới nhất</h2>
+          </div>
+          <span id="latestObserved" class="muted">--</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Địa điểm</th>
+                <th>AQI hiện tại</th>
+                <th>PM2.5</th>
+                <th>Tốc độ</th>
+                <th>Nhiệt độ</th>
+                <th>Độ ẩm</th>
+              </tr>
+            </thead>
+            <tbody id="observationRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Model</p>
+            <h2>Thông tin model đang dùng</h2>
+          </div>
+        </div>
+        <div id="modelInfo" class="model-info"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        AQI lấy từ Open-Meteo/CAMS Global, dùng cho phân tích tham khảo. Không
+        dùng thay thế cảnh báo sức khỏe chính thức.
+      </p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

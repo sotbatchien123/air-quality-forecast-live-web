@@ -1,0 +1,82 @@
+name: Live forecast and GitHub Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      timestamp:
+        description: "Optional local timestamp, for example 2026-06-23 09:00:00"
+        required: false
+        type: string
+      skip_collection:
+        description: "Only export TiDB data to web JSON"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages-live-forecast
+  cancel-in-progress: false
+
+jobs:
+  live-forecast-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ml.txt
+
+      - name: Run hourly collector and export dashboard JSON
+        env:
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT || '4000' }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          DB_SSL_MODE: ${{ secrets.DB_SSL_MODE || 'VERIFY_IDENTITY' }}
+          DB_SSL_CA: ${{ secrets.DB_SSL_CA }}
+          LIVE_DB_REQUIRED: "true"
+          INPUT_TIMESTAMP: ${{ github.event.inputs.timestamp || '' }}
+          INPUT_SKIP_COLLECTION: ${{ github.event.inputs.skip_collection || 'false' }}
+        run: |
+          ARGS=(--hydrate-hours 36)
+          if [ -n "$INPUT_TIMESTAMP" ]; then
+            ARGS+=(--timestamp "$INPUT_TIMESTAMP")
+          fi
+          if [ "$INPUT_SKIP_COLLECTION" = "true" ]; then
+            ARGS+=(--skip-collection)
+          fi
+          python src/live/github_actions_hourly.py "${ARGS[@]}"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

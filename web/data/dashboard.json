@@ -1,0 +1,22 @@
+{
+  "generated_at": null,
+  "status": "waiting_for_github_actions",
+  "counts": {},
+  "latest_target_at": null,
+  "latest_observed_at": null,
+  "latest_model_version": null,
+  "summary": {
+    "prediction_count": 0,
+    "observation_count": 0,
+    "avg_predicted_us_aqi": null,
+    "max_predicted_us_aqi": null,
+    "avg_predicted_currentspeed": null,
+    "avg_predicted_traffic_density": null,
+    "aqi_category_counts": {}
+  },
+  "provinces": [],
+  "predictions": [],
+  "observations": [],
+  "collector_runs": [],
+  "models": []
+}

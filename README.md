@@ -24,8 +24,9 @@ dẫn theo máy cá nhân.
 6. [Các model trong project](#các-model-trong-project)
 7. [Cách chạy model](#cách-chạy-model)
 8. [Live 24/24 và TiDB](#live-2424-và-tidb)
-9. [Kết quả thử nghiệm chính](#kết-quả-thử-nghiệm-chính)
-10. [Những phần đã bỏ](#những-phần-đã-bỏ)
+9. [Deploy web bằng GitHub Actions](#deploy-web-bằng-github-actions)
+10. [Kết quả thử nghiệm chính](#kết-quả-thử-nghiệm-chính)
+11. [Những phần đã bỏ](#những-phần-đã-bỏ)
 
 ## Quy Tắc Đường Dẫn
 
@@ -382,6 +383,76 @@ Import/upsert dữ liệu đã transform:
 ```powershell
 python src\database\transform_tidb_imports.py
 python src\database\import_tidb_data.py typed --input-dir data\tidb_import
+```
+
+## Deploy Web Bằng GitHub Actions
+
+Project đã có static web trong `web/` và workflow:
+
+```text
+.github/workflows/live_pages.yml
+```
+
+Workflow chạy theo lịch mỗi giờ:
+
+```text
+17 * * * *
+```
+
+Mỗi lần chạy:
+
+```text
+1. Checkout repo
+2. Cài Python dependencies
+3. Hydrate 36 giờ observation/prediction gần nhất từ TiDB
+4. Gọi live collector để lấy Open-Meteo + TomTom
+5. Predict bằng model hourly nếu đủ history
+6. Upsert kết quả vào TiDB
+7. Export web/data/dashboard.json
+8. Deploy thư mục web/ lên GitHub Pages
+```
+
+### GitHub Secrets cần tạo
+
+Vào GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret.
+
+| Secret | Ý nghĩa |
+|---|---|
+| `TOMTOM_API_KEY` | Key TomTom dùng cho traffic live. |
+| `DB_HOST` | Host TiDB Cloud. |
+| `DB_PORT` | Thường là `4000`. |
+| `DB_USERNAME` | User TiDB. |
+| `DB_PASSWORD` | Password TiDB. |
+| `DB_DATABASE` | Database, ví dụ `air_quality_forecast`. |
+| `DB_SSL_MODE` | Nên dùng `VERIFY_IDENTITY`. |
+| `DB_SSL_CA` | Có thể để trống nếu TiDB không yêu cầu CA file riêng. |
+
+### Bật GitHub Pages
+
+Vào GitHub repo -> Settings -> Pages:
+
+```text
+Build and deployment -> Source -> GitHub Actions
+```
+
+Sau đó vào tab Actions, chạy workflow `Live forecast and GitHub Pages` bằng
+`Run workflow`. Các lần sau GitHub sẽ tự chạy theo lịch mỗi giờ.
+
+### Test chỉ export web, không gọi API live
+
+Trong `Run workflow`, bật `skip_collection=true`. Cách này chỉ đọc TiDB và deploy
+web, hữu ích khi muốn kiểm tra giao diện mà không gọi TomTom/Open-Meteo.
+
+### Chạy web local
+
+```powershell
+python -m http.server 8000 -d web
+```
+
+Mở:
+
+```text
+http://localhost:8000
 ```
 
 ## Kết Quả Thử Nghiệm Chính

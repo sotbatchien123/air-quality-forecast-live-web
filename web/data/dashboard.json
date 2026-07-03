@@ -2,6 +2,7 @@
   "generated_at": null,
   "status": "waiting_for_github_actions",
   "counts": {},
+  "latest_prediction_is_current": false,
   "latest_target_at": null,
   "latest_observed_at": null,
   "latest_model_version": null,

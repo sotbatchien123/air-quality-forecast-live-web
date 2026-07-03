@@ -95,6 +95,10 @@ function setStatus(data) {
   } else if (data.status === "warming_up_live_history") {
     statusText.textContent =
       "Model hourly đang gom lại 12 giờ live history trước khi sinh prediction mới";
+  } else if (data.status === "live_collection_failed") {
+    dot.classList.add("error");
+    statusText.textContent =
+      "Lần lấy dữ liệu live mới nhất lỗi; web đang giữ prediction gần nhất trong TiDB";
   } else if (data.status === "waiting_for_github_actions") {
     statusText.textContent = "Đang chờ GitHub Actions sinh dữ liệu lần đầu";
   } else {

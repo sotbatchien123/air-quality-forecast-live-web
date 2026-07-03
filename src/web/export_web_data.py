@@ -335,15 +335,27 @@ def build_payload(database: LiveDatabase) -> dict[str, Any]:
     summary = summarize_predictions(predictions)
     summary["observation_count"] = len(observations)
     latest_run_status = runs[0].get("status") if runs else None
-    status = "ready" if predictions else "waiting_for_predictions"
-    if latest_run_status == "waiting_for_history":
+    latest_target_at = latest_prediction.get("target_at")
+    latest_observed_at = latest_observation.get("observed_at")
+    prediction_is_current = False
+    if latest_target_at and latest_observed_at:
+        prediction_is_current = pd.Timestamp(latest_target_at) > pd.Timestamp(
+            latest_observed_at
+        )
+    status = "ready" if predictions and prediction_is_current else "waiting_for_predictions"
+    if latest_run_status == "waiting_for_history" or (
+        predictions and not prediction_is_current
+    ):
         status = "warming_up_live_history"
+    if latest_run_status == "failed" and not prediction_is_current:
+        status = "live_collection_failed"
     return {
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "status": status,
         "counts": counts,
-        "latest_target_at": latest_prediction.get("target_at"),
-        "latest_observed_at": latest_observation.get("observed_at"),
+        "latest_prediction_is_current": prediction_is_current,
+        "latest_target_at": latest_target_at,
+        "latest_observed_at": latest_observed_at,
         "latest_model_version": latest_prediction.get("model_version"),
         "summary": summary,
         "hourly_forecasts": hourly_forecasts,

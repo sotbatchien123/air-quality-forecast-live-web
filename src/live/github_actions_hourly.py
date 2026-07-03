@@ -228,13 +228,20 @@ def main() -> None:
             should_collect = False
 
     if should_collect:
-        run(
-            args.timestamp,
-            args.observations_file.resolve(),
-            args.predictions_dir.resolve(),
-            args.predictions_file.resolve(),
-            None,
-        )
+        try:
+            run(
+                args.timestamp,
+                args.observations_file.resolve(),
+                args.predictions_dir.resolve(),
+                args.predictions_file.resolve(),
+                None,
+            )
+        except Exception as exc:
+            print(
+                "WARNING: live collection failed; exporting latest TiDB data only: "
+                f"{exc}",
+                file=sys.stderr,
+            )
 
     export_web_data(args.web_output_file.resolve())
 

@@ -393,11 +393,14 @@ Project đã có static web trong `web/` và workflow:
 .github/workflows/live_pages.yml
 ```
 
-Workflow chạy theo lịch mỗi giờ:
+Workflow kiểm tra mỗi 15 phút để tránh GitHub schedule bị trễ/mất một giờ:
 
 ```text
-17 * * * *
+*/15 * * * *
 ```
+
+Nếu giờ hiện tại đã có đủ observation trong TiDB, workflow sẽ bỏ qua bước gọi API
+TomTom/Open-Meteo để không tốn quota lặp lại.
 
 Mỗi lần chạy:
 

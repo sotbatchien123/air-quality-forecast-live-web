@@ -31,6 +31,8 @@ from live.live_hourly_predictor import (  # noqa: E402
     DEFAULT_OBSERVATIONS_FILE,
     DEFAULT_PREDICTIONS_DIR,
     DEFAULT_PREDICTIONS_FILE,
+    TOMTOM_UNSUPPORTED_LOCATIONS,
+    load_locations,
     local_hour,
     run,
 )
@@ -143,6 +145,31 @@ def hydrate_live_files(
     return observation_count, prediction_count
 
 
+def live_supported_location_count() -> int:
+    locations = load_locations()
+    supported = locations[
+        ~locations["location_key"].isin(TOMTOM_UNSUPPORTED_LOCATIONS)
+    ]
+    return int(len(supported))
+
+
+def has_current_hour_observations(
+    observations_file: Path,
+    current: pd.Timestamp,
+    required_locations: int,
+) -> bool:
+    if not observations_file.is_file():
+        return False
+    frame = pd.read_csv(observations_file, encoding="utf-8-sig")
+    required_columns = {"timestamp", "location_key"}
+    if frame.empty or not required_columns.issubset(frame.columns):
+        return False
+    timestamps = pd.to_datetime(frame["timestamp"], errors="coerce")
+    current_rows = frame[timestamps == current]
+    location_count = current_rows["location_key"].astype(str).nunique()
+    return location_count >= required_locations
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run hourly GitHub Actions collection and export Pages data"
@@ -185,7 +212,22 @@ def main() -> None:
         args.predictions_file.resolve(),
     )
 
-    if not args.skip_collection:
+    should_collect = not args.skip_collection
+    if should_collect:
+        current = local_hour(args.timestamp)
+        required_locations = live_supported_location_count()
+        if has_current_hour_observations(
+            args.observations_file.resolve(),
+            current,
+            required_locations,
+        ):
+            print(
+                f"Current hour {current} already has "
+                f"{required_locations} live observations; skip API collection."
+            )
+            should_collect = False
+
+    if should_collect:
         run(
             args.timestamp,
             args.observations_file.resolve(),

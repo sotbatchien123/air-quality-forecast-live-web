@@ -1,4 +1,5 @@
 const DATA_URL = "data/dashboard.json";
+const REGIONS_URL = "data/model_regions.geojson";
 
 const provinceNames = {
   ba_ria_vung_tau: "Bà Rịa - Vũng Tàu",
@@ -9,6 +10,7 @@ const provinceNames = {
 };
 
 let dashboard = null;
+let regionGeoJson = null;
 let selectedTargetAt = null;
 let selectedMapLocationKey = null;
 
@@ -64,9 +66,27 @@ function isFiniteNumber(value) {
   return Number.isFinite(Number(value));
 }
 
-function coordinateBounds(rows) {
-  const lats = rows.map((row) => Number(row.lat));
-  const lons = rows.map((row) => Number(row.lon));
+function visitCoordinates(coordinates, callback) {
+  if (!Array.isArray(coordinates)) return;
+  if (typeof coordinates[0] === "number" && typeof coordinates[1] === "number") {
+    callback(coordinates);
+    return;
+  }
+  coordinates.forEach((item) => visitCoordinates(item, callback));
+}
+
+function geoJsonBounds(features) {
+  const lats = [];
+  const lons = [];
+  features.forEach((feature) => {
+    visitCoordinates(feature.geometry?.coordinates, (point) => {
+      if (isFiniteNumber(point[0]) && isFiniteNumber(point[1])) {
+        lons.push(Number(point[0]));
+        lats.push(Number(point[1]));
+      }
+    });
+  });
+  if (!lats.length || !lons.length) return null;
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLon = Math.min(...lons);
@@ -81,18 +101,48 @@ function coordinateBounds(rows) {
   };
 }
 
-function projectCoordinate(row, bounds) {
+function projectLngLat(lon, lat, bounds) {
   const lonRange = bounds.maxLon - bounds.minLon || 1;
   const latRange = bounds.maxLat - bounds.minLat || 1;
   return {
-    x: ((Number(row.lon) - bounds.minLon) / lonRange) * 100,
-    y: ((bounds.maxLat - Number(row.lat)) / latRange) * 100,
+    x: ((Number(lon) - bounds.minLon) / lonRange) * 100,
+    y: ((bounds.maxLat - Number(lat)) / latRange) * 100,
   };
 }
 
-function mapRadius(row) {
-  const aqi = Number(row.predicted_us_aqi || 0);
-  return Math.max(3.8, Math.min(8.5, 3.8 + aqi / 45));
+function ringPath(ring, bounds) {
+  return `${ring
+    .map((point, index) => {
+      const projected = projectLngLat(point[0], point[1], bounds);
+      return `${index === 0 ? "M" : "L"} ${projected.x.toFixed(2)} ${projected.y.toFixed(2)}`;
+    })
+    .join(" ")} Z`;
+}
+
+function geometryPath(geometry, bounds) {
+  if (!geometry) return "";
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates.map((ring) => ringPath(ring, bounds)).join(" ");
+  }
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates
+      .map((polygon) => polygon.map((ring) => ringPath(ring, bounds)).join(" "))
+      .join(" ");
+  }
+  return "";
+}
+
+function featureCenter(feature, bounds) {
+  let lonSum = 0;
+  let latSum = 0;
+  let count = 0;
+  visitCoordinates(feature.geometry?.coordinates, (point) => {
+    lonSum += Number(point[0]);
+    latSum += Number(point[1]);
+    count += 1;
+  });
+  if (!count) return null;
+  return projectLngLat(lonSum / count, latSum / count, bounds);
 }
 
 function targetKey(value) {
@@ -263,37 +313,29 @@ function renderCategoryBars(data) {
     .join("");
 }
 
-function provinceCentroids(rows, bounds) {
-  const groups = new Map();
-  rows.forEach((row) => {
-    const key = row.province_key || "unknown";
-    const group = groups.get(key) || { lat: 0, lon: 0, count: 0 };
-    group.lat += Number(row.lat);
-    group.lon += Number(row.lon);
-    group.count += 1;
-    groups.set(key, group);
-  });
-  return [...groups.entries()].map(([province, group]) => {
-    const point = projectCoordinate(
-      {
-        lat: group.lat / group.count,
-        lon: group.lon / group.count,
-      },
-      bounds,
-    );
-    return { province, ...point };
-  });
-}
-
-function renderMapDetail(row) {
+function renderMapDetail(row, feature) {
   const container = $("mapDetail");
+  const properties = feature?.properties || {};
+  if (!row && !feature) {
+    container.innerHTML = `<p class="muted">Chưa có vùng nào trên bản đồ.</p>`;
+    return;
+  }
   if (!row) {
-    container.innerHTML = `<p class="muted">Chưa có điểm nào trên bản đồ.</p>`;
+    container.innerHTML = `
+      <p class="eyebrow">Selected Region</p>
+      <h3>${escapeHtml(properties.display_name || properties.district_key)}</h3>
+      <p class="muted">${escapeHtml(provinceNames[properties.province_key] || properties.province_key)}</p>
+      <p class="muted">Vùng này có ranh giới GeoJSON nhưng chưa có prediction cho giờ đang chọn.</p>
+      <dl>
+        <dt>Nguồn ranh giới</dt><dd>${escapeHtml(properties.source || "GeoJSON")}</dd>
+        <dt>GADM</dt><dd>${escapeHtml(properties.gadm_name_2 || "--")}</dd>
+      </dl>
+    `;
     return;
   }
   const category = row.aqi_category || "Unknown";
   container.innerHTML = `
-    <p class="eyebrow">Selected Point</p>
+    <p class="eyebrow">Selected Region</p>
     <h3>${escapeHtml(row.display_name || row.district_key)}</h3>
     <p class="muted">${escapeHtml(provinceNames[row.province_key] || row.province_key)}</p>
     <dl>
@@ -302,71 +344,87 @@ function renderMapDetail(row) {
       <dt>Nhóm AQI</dt><dd><span class="pill ${categoryClass(category)}">${escapeHtml(category)}</span></dd>
       <dt>Tốc độ</dt><dd>${formatNumber(row.predicted_currentspeed, 1)} km/h</dd>
       <dt>Mật độ</dt><dd>${formatPercent(row.predicted_traffic_density)}</dd>
-      <dt>Lat/Lon</dt><dd>${formatNumber(row.lat, 3)}, ${formatNumber(row.lon, 3)}</dd>
+      <dt>Ranh giới</dt><dd>${escapeHtml(properties.gadm_name_2 || row.display_name || "--")}</dd>
     </dl>
   `;
 }
 
 function renderPredictionMap() {
   const container = $("predictionMap");
-  const rows = predictionsForSelectedHour().filter(
-    (row) => isFiniteNumber(row.lat) && isFiniteNumber(row.lon),
-  );
-  if (!rows.length) {
-    container.innerHTML = `<p class="muted">Không có lat/lon cho giờ predict đang chọn.</p>`;
-    renderMapDetail(null);
+  const features = regionGeoJson?.features || [];
+  if (!features.length) {
+    container.innerHTML = `<p class="muted">Không tải được GeoJSON ranh giới.</p>`;
+    renderMapDetail(null, null);
     return;
   }
 
+  const bounds = geoJsonBounds(features);
+  if (!bounds) {
+    container.innerHTML = `<p class="muted">GeoJSON không có tọa độ hợp lệ.</p>`;
+    renderMapDetail(null, null);
+    return;
+  }
+  const rows = predictionsForSelectedHour();
+  const predictionByKey = new Map(rows.map((row) => [row.location_key, row]));
+  const featureByKey = new Map(features.map((feature) => [feature.properties.location_key, feature]));
   const sortedRows = rows
     .slice()
     .sort((a, b) => Number(b.predicted_us_aqi || 0) - Number(a.predicted_us_aqi || 0));
+  const firstMappedRow =
+    sortedRows.find((row) => featureByKey.has(row.location_key)) || sortedRows[0];
+  if (!selectedMapLocationKey || !featureByKey.has(selectedMapLocationKey)) {
+    selectedMapLocationKey = firstMappedRow?.location_key || features[0].properties.location_key;
+  }
   const activeRow =
-    rows.find((row) => row.location_key === selectedMapLocationKey) || sortedRows[0];
-  selectedMapLocationKey = activeRow.location_key;
-  const bounds = coordinateBounds(rows);
-  const labelKeys = new Set(sortedRows.slice(0, 6).map((row) => row.location_key));
-  const pointMarkup = rows
-    .map((row) => {
-      const point = projectCoordinate(row, bounds);
-      const category = row.aqi_category || "Unknown";
-      const selected = row.location_key === selectedMapLocationKey;
-      const label = escapeHtml(row.display_name || row.district_key);
+    predictionByKey.get(selectedMapLocationKey) || firstMappedRow || null;
+  const activeFeature =
+    featureByKey.get(selectedMapLocationKey) ||
+    (activeRow ? featureByKey.get(activeRow.location_key) : null) ||
+    features[0];
+  const labelKeys = new Set(sortedRows.slice(0, 8).map((row) => row.location_key));
+  labelKeys.add(selectedMapLocationKey);
+  const regionMarkup = features
+    .map((feature) => {
+      const key = feature.properties.location_key;
+      const row = predictionByKey.get(key);
+      const category = row?.aqi_category || "Unknown";
+      const selected = key === selectedMapLocationKey;
+      const label = escapeHtml(feature.properties.display_name || feature.properties.district_key);
+      const dataClass = row ? categoryClass(category) : "no-data";
+      const path = geometryPath(feature.geometry, bounds);
       return `
-        <g class="map-point-group">
-          <circle
-            class="map-point ${categoryClass(category)} ${selected ? "selected" : ""}"
-            cx="${point.x.toFixed(2)}"
-            cy="${point.y.toFixed(2)}"
-            r="${mapRadius(row).toFixed(2)}"
-            data-location-key="${escapeHtml(row.location_key)}"
+        <path
+            class="region-shape ${dataClass} ${selected ? "selected" : ""}"
+            d="${path}"
+            fill-rule="evenodd"
+            data-location-key="${escapeHtml(key)}"
             tabindex="0"
             role="button"
-            aria-label="${label}, AQI ${formatNumber(row.predicted_us_aqi, 1)}"
+            aria-label="${label}${row ? `, AQI ${formatNumber(row.predicted_us_aqi, 1)}` : ", chưa có prediction"}"
           >
-            <title>${label}: AQI ${formatNumber(row.predicted_us_aqi, 1)}</title>
-          </circle>
-          ${
-            labelKeys.has(row.location_key)
-              ? `<text class="map-label" x="${(point.x + 1.8).toFixed(2)}" y="${(point.y - 1.8).toFixed(2)}">${label}</text>`
-              : ""
-          }
-        </g>
+            <title>${label}${row ? `: AQI ${formatNumber(row.predicted_us_aqi, 1)}` : ": chưa có prediction"}</title>
+          </path>
       `;
     })
     .join("");
-  const provinceLabels = provinceCentroids(rows, bounds)
-    .map(
-      (row) => `
-        <text class="province-map-label" x="${row.x.toFixed(2)}" y="${row.y.toFixed(2)}">
-          ${escapeHtml(provinceNames[row.province] || row.province)}
+  const renderedLabelKeys = new Set();
+  const labels = features
+    .map((feature) => {
+      const key = feature.properties.location_key;
+      if (!labelKeys.has(key) || renderedLabelKeys.has(key)) return "";
+      renderedLabelKeys.add(key);
+      const point = featureCenter(feature, bounds);
+      if (!point) return "";
+      return `
+        <text class="map-label" x="${point.x.toFixed(2)}" y="${point.y.toFixed(2)}">
+          ${escapeHtml(feature.properties.display_name || feature.properties.district_key)}
         </text>
-      `,
-    )
+      `;
+    })
     .join("");
 
   container.innerHTML = `
-    <svg viewBox="0 0 100 100" role="img" aria-label="Bản đồ prediction ${formatDateTime(selectedTargetAt)}">
+    <svg viewBox="0 0 100 100" role="img" aria-label="GeoJSON map prediction ${formatDateTime(selectedTargetAt)}">
       <defs>
         <radialGradient id="mapGlow" cx="50%" cy="40%" r="65%">
           <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22" />
@@ -374,13 +432,12 @@ function renderPredictionMap() {
         </radialGradient>
       </defs>
       <rect class="map-bg" x="0" y="0" width="100" height="100" rx="6" />
-      <path class="map-region" d="M 18 16 C 35 5, 58 9, 78 22 C 92 31, 89 53, 80 69 C 68 90, 38 93, 20 80 C 5 69, 7 31, 18 16 Z" />
       <g class="map-grid">
         <path d="M 12 25 H 88 M 10 50 H 90 M 12 75 H 88" />
         <path d="M 25 10 V 90 M 50 7 V 93 M 75 10 V 90" />
       </g>
-      ${provinceLabels}
-      ${pointMarkup}
+      <g class="region-layer">${regionMarkup}</g>
+      <g class="label-layer">${labels}</g>
     </svg>
   `;
 
@@ -397,7 +454,7 @@ function renderPredictionMap() {
       }
     });
   });
-  renderMapDetail(activeRow);
+  renderMapDetail(activeRow, activeFeature);
 }
 
 function renderRunStatus(data) {
@@ -526,12 +583,18 @@ function render(data) {
 
 async function loadDashboard() {
   try {
-    const response = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    render(await response.json());
+    const timestamp = Date.now();
+    const [dashboardResponse, regionsResponse] = await Promise.all([
+      fetch(`${DATA_URL}?t=${timestamp}`, { cache: "no-store" }),
+      fetch(`${REGIONS_URL}?t=${timestamp}`, { cache: "no-store" }),
+    ]);
+    if (!dashboardResponse.ok) throw new Error(`dashboard.json HTTP ${dashboardResponse.status}`);
+    if (!regionsResponse.ok) throw new Error(`model_regions.geojson HTTP ${regionsResponse.status}`);
+    regionGeoJson = await regionsResponse.json();
+    render(await dashboardResponse.json());
   } catch (error) {
     $("statusDot").className = "status-dot error";
-    $("statusText").textContent = `Không tải được dashboard.json: ${error.message}`;
+    $("statusText").textContent = `Không tải được dữ liệu web: ${error.message}`;
   }
 }
 

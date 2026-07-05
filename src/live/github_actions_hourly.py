@@ -34,6 +34,7 @@ from live.live_hourly_predictor import (  # noqa: E402
     TOMTOM_UNSUPPORTED_LOCATIONS,
     load_locations,
     local_hour,
+    predict_from_existing_observations,
     run,
 )
 from web.export_web_data import DEFAULT_OUTPUT, export_web_data  # noqa: E402
@@ -107,11 +108,14 @@ def hydrate_table(
 ) -> int:
     connection = database.connect()
     try:
-        frame = pd.read_sql(sql, connection, params=(start.to_pydatetime(),))
+        with connection.cursor() as cursor:
+            cursor.execute(sql, (start.to_pydatetime(),))
+            rows = cursor.fetchall()
     finally:
         connection.close()
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
+    frame = pd.DataFrame.from_records(rows)
     if frame.empty:
         output_file.unlink(missing_ok=True)
         print(f"No rows to hydrate for {output_file}")
@@ -223,8 +227,21 @@ def main() -> None:
         ):
             print(
                 f"Current hour {current} already has "
-                f"{required_locations} live observations; skip API collection."
+                f"{required_locations} live observations; reuse them for prediction."
             )
+            try:
+                predict_from_existing_observations(
+                    args.timestamp,
+                    args.observations_file.resolve(),
+                    args.predictions_dir.resolve(),
+                    args.predictions_file.resolve(),
+                )
+            except Exception as exc:
+                print(
+                    "WARNING: prediction from existing observations failed; "
+                    f"exporting latest TiDB data only: {exc}",
+                    file=sys.stderr,
+                )
             should_collect = False
 
     if should_collect:

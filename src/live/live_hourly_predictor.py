@@ -98,6 +98,13 @@ ROLLING_COLUMNS = ["currentspeed", "traffic_density", "us_aqi", "pm2_5"]
 LAG_HOURS = [1, 2, 3, 6, 12]
 ROLLING_WINDOWS = [3, 6, 12]
 REQUIRED_HISTORY_HOURS = max(LAG_HOURS)
+TIME_SERIES_COLUMNS = WEATHER_COLUMNS + TRAFFIC_COLUMNS + AQI_COLUMNS
+LOCATION_CONTEXT_COLUMNS = [
+    "province_key",
+    "district_key",
+    "district",
+    *STATIC_COLUMNS,
+]
 TOMTOM_UNSUPPORTED_LOCATIONS = {
     "ba_ria_vung_tau__con_dao",
     "dong_nai__tan_phu",
@@ -410,6 +417,43 @@ def filter_observations_for_locations(
     return observations.loc[mask].copy()
 
 
+def fill_history_gaps(observations: pd.DataFrame, current: pd.Timestamp) -> pd.DataFrame:
+    """Create a complete hourly panel for lag/rolling features.
+
+    GitHub Actions schedules can be delayed or skipped. TomTom live traffic cannot
+    be fetched retroactively, so missed hours are bridged with nearest known values
+    to keep the public forecast running instead of staying stale indefinitely.
+    """
+
+    start = current - pd.Timedelta(hours=REQUIRED_HISTORY_HOURS - 1)
+    hours = pd.date_range(start, current, freq="h")
+    frame = observations[
+        (observations["timestamp"] >= start) & (observations["timestamp"] <= current)
+    ].copy()
+    if frame.empty:
+        return frame
+
+    fill_columns = [
+        column
+        for column in [*LOCATION_CONTEXT_COLUMNS, *TIME_SERIES_COLUMNS]
+        if column in frame.columns
+    ]
+    groups: list[pd.DataFrame] = []
+    for location_key, group in frame.groupby("location_key", sort=False):
+        group = (
+            group.sort_values("timestamp")
+            .drop_duplicates("timestamp", keep="last")
+            .set_index("timestamp")
+            .reindex(hours)
+        )
+        group["timestamp"] = group.index
+        group["location_key"] = location_key
+        group[fill_columns] = group[fill_columns].ffill().bfill()
+        groups.append(group.reset_index(drop=True))
+
+    return pd.concat(groups, ignore_index=True)
+
+
 def upsert_observations(new_rows: pd.DataFrame, output_file: Path) -> pd.DataFrame:
     if output_file.exists():
         existing = pd.read_csv(output_file, encoding="utf-8-sig")
@@ -434,11 +478,19 @@ def build_inference(
     target_weather: dict[str, float],
     bundle: dict[str, Any],
 ) -> pd.DataFrame | None:
+    observations = observations.copy()
+    observations = drop_repeated_header_rows(observations, "timestamp")
+    observations["timestamp"] = pd.to_datetime(
+        observations["timestamp"],
+        errors="raise",
+    )
     target = current + pd.Timedelta(hours=1)
     current_rows = observations[observations["timestamp"] == current].copy()
     location_count = observations["location_key"].nunique()
     if len(current_rows) != location_count:
         return None
+    observations = fill_history_gaps(observations, current)
+    current_rows = observations[observations["timestamp"] == current].copy()
 
     inference = current_rows[
         [
@@ -458,7 +510,7 @@ def build_inference(
             index=inference.index,
         )
 
-    lag_columns = WEATHER_COLUMNS + TRAFFIC_COLUMNS + AQI_COLUMNS
+    lag_columns = TIME_SERIES_COLUMNS
     for lag in LAG_HOURS:
         source_timestamp = target - pd.Timedelta(hours=lag)
         lag_rows = observations[
@@ -553,6 +605,34 @@ def upsert_predictions(new_rows: pd.DataFrame, output_file: Path) -> pd.DataFram
     return combined
 
 
+def read_observations_file(observations_file: Path) -> pd.DataFrame:
+    if not observations_file.is_file():
+        return pd.DataFrame()
+    observations = pd.read_csv(observations_file, encoding="utf-8-sig")
+    observations = drop_repeated_header_rows(observations, "timestamp")
+    if observations.empty:
+        return observations
+    observations["timestamp"] = pd.to_datetime(
+        observations["timestamp"],
+        errors="raise",
+    )
+    return observations
+
+
+def read_predictions_file(predictions_file: Path) -> pd.DataFrame:
+    if not predictions_file.is_file():
+        return pd.DataFrame()
+    predictions = pd.read_csv(predictions_file, encoding="utf-8-sig")
+    predictions = drop_repeated_header_rows(predictions, "target_timestamp")
+    if predictions.empty:
+        return predictions
+    predictions["target_timestamp"] = pd.to_datetime(
+        predictions["target_timestamp"],
+        errors="raise",
+    )
+    return predictions
+
+
 def configured_database() -> LiveDatabase | None:
     return LiveDatabase.from_environment(required=False)
 
@@ -593,6 +673,148 @@ def sync_database_window(
         ]
         prediction_count = database.upsert_predictions(recent_predictions, version)
     return observation_count, prediction_count, version
+
+
+def predict_from_existing_observations(
+    timestamp: str | None,
+    observations_file: Path,
+    predictions_dir: Path,
+    predictions_file: Path,
+) -> bool:
+    current = local_hour(timestamp)
+    all_locations = load_locations()
+    locations = all_locations[
+        ~all_locations["location_key"].isin(TOMTOM_UNSUPPORTED_LOCATIONS)
+    ].reset_index(drop=True)
+    bundle = joblib.load(MODEL_FILE)
+    version = model_version(bundle)
+    database = configured_database()
+    run_id: str | None = None
+    if database is not None:
+        try:
+            verify_database(database)
+            run_id = database.start_run(current, version)
+        except Exception as exc:
+            if database_sync_required():
+                raise
+            print(f"WARNING: database sync disabled for this run: {exc}")
+            database = None
+
+    observation_count = 0
+    prediction_count = 0
+    try:
+        observations = read_observations_file(observations_file)
+        scoring_observations = filter_observations_for_locations(
+            observations,
+            locations,
+        )
+        current_rows = scoring_observations[
+            scoring_observations["timestamp"] == current
+        ]
+        observation_count = len(current_rows)
+        if observation_count != len(locations):
+            predictions = read_predictions_file(predictions_file)
+            if database is not None:
+                sync_database_window(
+                    database,
+                    all_locations,
+                    bundle,
+                    observations,
+                    predictions,
+                    current,
+                )
+                database.finish_run(
+                    run_id,
+                    "waiting_for_history",
+                    observation_count,
+                    0,
+                )
+            print(
+                f"Prediction not ready: {observation_count}/{len(locations)} "
+                f"current observations are available for {current}."
+            )
+            return False
+
+        _, target_weather = fetch_weather_hours(current)
+        inference = build_inference(
+            scoring_observations,
+            current,
+            target_weather,
+            bundle,
+        )
+        if inference is None:
+            predictions = read_predictions_file(predictions_file)
+            if database is not None:
+                sync_database_window(
+                    database,
+                    all_locations,
+                    bundle,
+                    observations,
+                    predictions,
+                    current,
+                )
+                database.finish_run(
+                    run_id,
+                    "waiting_for_history",
+                    observation_count,
+                    0,
+                )
+            available_hours = scoring_observations["timestamp"].nunique()
+            print(
+                f"Prediction not ready: {available_hours}/{REQUIRED_HISTORY_HOURS} "
+                "distinct hourly snapshots are available. "
+                "Continue collecting once per hour."
+            )
+            return False
+
+        target = current + pd.Timedelta(hours=1)
+        output_file = predictions_dir / (
+            f"traffic_aqi_live_forecast_{target:%Y-%m-%d_%H00}.csv"
+        )
+        result = predict(inference, bundle, output_file, version)
+        prediction_count = len(result)
+        predictions = upsert_predictions(result, predictions_file)
+        print(
+            f"Saved {prediction_count:,} live forecasts from existing observations "
+            f"to: {output_file}"
+        )
+
+        if database is not None:
+            synced_observations, synced_predictions, _ = sync_database_window(
+                database,
+                all_locations,
+                bundle,
+                observations,
+                predictions,
+                current,
+            )
+            database.finish_run(
+                run_id,
+                "success",
+                observation_count,
+                prediction_count,
+            )
+            print(
+                f"Database sync complete: observations={synced_observations:,}; "
+                f"predictions={synced_predictions:,}"
+            )
+        return True
+    except Exception as exc:
+        if database is not None and run_id is not None:
+            try:
+                database.finish_run(
+                    run_id,
+                    "failed",
+                    observation_count,
+                    prediction_count,
+                    str(exc),
+                )
+            except Exception as finish_error:
+                print(
+                    f"WARNING: could not update failed collector run: {finish_error}",
+                    file=sys.stderr,
+                )
+        raise
 
 
 def doctor(timestamp: str | None, key_file: Path | None) -> None:

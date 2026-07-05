@@ -35,7 +35,8 @@ from database.live_database import DatabaseConfigError, LiveDatabase  # noqa: E4
 
 
 DEFAULT_OUTPUT = ROOT_DIR / "web" / "data" / "dashboard.json"
-DEFAULT_HOURLY_LIMIT = 24
+DEFAULT_HOURLY_LIMIT = 336
+DEFAULT_HOURLY_LOOKBACK_HOURS = 336
 
 
 def as_json_value(value: Any) -> Any:
@@ -99,16 +100,26 @@ def fetch_table_counts(cursor) -> dict[str, int]:
     return counts
 
 
-def fetch_recent_target_hours(cursor, limit: int = DEFAULT_HOURLY_LIMIT) -> list[Any]:
+def fetch_recent_target_hours(
+    cursor,
+    limit: int = DEFAULT_HOURLY_LIMIT,
+    lookback_hours: int = DEFAULT_HOURLY_LOOKBACK_HOURS,
+) -> list[Any]:
+    cursor.execute("SELECT MAX(target_at) AS latest_target_at FROM live_hourly_predictions")
+    latest = cursor.fetchone()["latest_target_at"]
+    if latest is None:
+        return []
+    start = pd.Timestamp(latest) - pd.Timedelta(hours=lookback_hours)
     cursor.execute(
         """
         SELECT target_at
         FROM live_hourly_predictions
+        WHERE target_at >= %s
         GROUP BY target_at
         ORDER BY target_at DESC
         LIMIT %s
         """,
-        (limit,),
+        (start.to_pydatetime(), limit),
     )
     return [row["target_at"] for row in cursor.fetchall()]
 

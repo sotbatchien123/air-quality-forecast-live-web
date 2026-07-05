@@ -249,6 +249,184 @@ small {
   font-size: 1.35rem;
 }
 
+.map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.34fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.prediction-map,
+.map-detail {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.prediction-map {
+  min-height: 520px;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.prediction-map svg {
+  display: block;
+  width: 100%;
+  height: 520px;
+}
+
+.map-bg {
+  fill: url(#mapGlow);
+}
+
+.map-region {
+  fill: rgba(56, 189, 248, 0.08);
+  stroke: rgba(125, 211, 252, 0.3);
+  stroke-width: 0.4;
+}
+
+.map-grid path {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.18);
+  stroke-width: 0.18;
+}
+
+.map-point {
+  cursor: pointer;
+  stroke: rgba(2, 6, 23, 0.88);
+  stroke-width: 0.8;
+  transition:
+    opacity 160ms ease,
+    r 160ms ease,
+    stroke 160ms ease;
+}
+
+.map-point:hover,
+.map-point:focus,
+.map-point.selected {
+  opacity: 1;
+  outline: none;
+  stroke: white;
+  stroke-width: 1.4;
+}
+
+.map-point.Good {
+  fill: var(--good);
+}
+
+.map-point.Moderate {
+  fill: var(--moderate);
+}
+
+.map-point.Sensitive {
+  fill: var(--sensitive);
+}
+
+.map-point.Unhealthy {
+  fill: var(--unhealthy);
+}
+
+.map-point.Very {
+  fill: var(--very);
+}
+
+.map-point.Hazardous {
+  fill: var(--hazard);
+}
+
+.map-point.Unknown {
+  fill: #64748b;
+}
+
+.map-label,
+.province-map-label {
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(15, 23, 42, 0.95);
+  stroke-width: 0.7;
+}
+
+.map-label {
+  fill: #f8fafc;
+  font-size: 2.2px;
+  font-weight: 800;
+}
+
+.province-map-label {
+  fill: rgba(203, 213, 225, 0.72);
+  font-size: 2.5px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  text-transform: uppercase;
+}
+
+.map-detail {
+  padding: 20px;
+}
+
+.map-detail h3 {
+  margin: 0 0 8px;
+  font-size: 1.4rem;
+  letter-spacing: -0.03em;
+}
+
+.map-detail dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.map-detail dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.map-detail dd {
+  margin: -6px 0 0;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.map-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+.map-legend .Good {
+  background: var(--good);
+}
+
+.map-legend .Moderate {
+  background: var(--moderate);
+}
+
+.map-legend .Sensitive {
+  background: var(--sensitive);
+}
+
+.map-legend .Unhealthy {
+  background: var(--unhealthy);
+}
+
 .province-card strong {
   display: block;
   margin: 4px 0 12px;
@@ -418,6 +596,7 @@ footer {
 
   .cards,
   .province-grid,
+  .map-layout,
   .split {
     grid-template-columns: 1fr 1fr;
   }
@@ -440,6 +619,7 @@ footer {
 
   .cards,
   .province-grid,
+  .map-layout,
   .split {
     grid-template-columns: 1fr;
   }

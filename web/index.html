@@ -76,6 +76,28 @@
         <div id="hourlyForecastGrid" class="hour-grid"></div>
       </section>
 
+      <section class="panel map-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Prediction Map</p>
+            <h2>Bản đồ graphic theo từng giờ predict</h2>
+            <span class="muted">
+              Chọn một giờ ở trên để xem 62 địa điểm trên bản đồ.
+            </span>
+          </div>
+          <div class="map-legend" aria-label="Chú giải AQI">
+            <span><i class="Good"></i>Good</span>
+            <span><i class="Moderate"></i>Moderate</span>
+            <span><i class="Sensitive"></i>Sensitive</span>
+            <span><i class="Unhealthy"></i>Unhealthy</span>
+          </div>
+        </div>
+        <div class="map-layout">
+          <div id="predictionMap" class="prediction-map"></div>
+          <aside id="mapDetail" class="map-detail"></aside>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-heading">
           <div>

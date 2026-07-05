@@ -10,6 +10,7 @@ const provinceNames = {
 
 let dashboard = null;
 let selectedTargetAt = null;
+let selectedMapLocationKey = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,6 +49,50 @@ function categoryClass(category) {
   if (category === "Unhealthy for sensitive groups") return "Sensitive";
   if (category === "Very unhealthy") return "Very";
   return category.split(" ")[0];
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function isFiniteNumber(value) {
+  return Number.isFinite(Number(value));
+}
+
+function coordinateBounds(rows) {
+  const lats = rows.map((row) => Number(row.lat));
+  const lons = rows.map((row) => Number(row.lon));
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const latPadding = Math.max((maxLat - minLat) * 0.12, 0.02);
+  const lonPadding = Math.max((maxLon - minLon) * 0.12, 0.02);
+  return {
+    minLat: minLat - latPadding,
+    maxLat: maxLat + latPadding,
+    minLon: minLon - lonPadding,
+    maxLon: maxLon + lonPadding,
+  };
+}
+
+function projectCoordinate(row, bounds) {
+  const lonRange = bounds.maxLon - bounds.minLon || 1;
+  const latRange = bounds.maxLat - bounds.minLat || 1;
+  return {
+    x: ((Number(row.lon) - bounds.minLon) / lonRange) * 100,
+    y: ((bounds.maxLat - Number(row.lat)) / latRange) * 100,
+  };
+}
+
+function mapRadius(row) {
+  const aqi = Number(row.predicted_us_aqi || 0);
+  return Math.max(3.8, Math.min(8.5, 3.8 + aqi / 45));
 }
 
 function targetKey(value) {
@@ -218,6 +263,143 @@ function renderCategoryBars(data) {
     .join("");
 }
 
+function provinceCentroids(rows, bounds) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = row.province_key || "unknown";
+    const group = groups.get(key) || { lat: 0, lon: 0, count: 0 };
+    group.lat += Number(row.lat);
+    group.lon += Number(row.lon);
+    group.count += 1;
+    groups.set(key, group);
+  });
+  return [...groups.entries()].map(([province, group]) => {
+    const point = projectCoordinate(
+      {
+        lat: group.lat / group.count,
+        lon: group.lon / group.count,
+      },
+      bounds,
+    );
+    return { province, ...point };
+  });
+}
+
+function renderMapDetail(row) {
+  const container = $("mapDetail");
+  if (!row) {
+    container.innerHTML = `<p class="muted">Chưa có điểm nào trên bản đồ.</p>`;
+    return;
+  }
+  const category = row.aqi_category || "Unknown";
+  container.innerHTML = `
+    <p class="eyebrow">Selected Point</p>
+    <h3>${escapeHtml(row.display_name || row.district_key)}</h3>
+    <p class="muted">${escapeHtml(provinceNames[row.province_key] || row.province_key)}</p>
+    <dl>
+      <dt>Target</dt><dd>${formatDateTime(row.target_at)}</dd>
+      <dt>AQI dự báo</dt><dd>${formatNumber(row.predicted_us_aqi, 1)}</dd>
+      <dt>Nhóm AQI</dt><dd><span class="pill ${categoryClass(category)}">${escapeHtml(category)}</span></dd>
+      <dt>Tốc độ</dt><dd>${formatNumber(row.predicted_currentspeed, 1)} km/h</dd>
+      <dt>Mật độ</dt><dd>${formatPercent(row.predicted_traffic_density)}</dd>
+      <dt>Lat/Lon</dt><dd>${formatNumber(row.lat, 3)}, ${formatNumber(row.lon, 3)}</dd>
+    </dl>
+  `;
+}
+
+function renderPredictionMap() {
+  const container = $("predictionMap");
+  const rows = predictionsForSelectedHour().filter(
+    (row) => isFiniteNumber(row.lat) && isFiniteNumber(row.lon),
+  );
+  if (!rows.length) {
+    container.innerHTML = `<p class="muted">Không có lat/lon cho giờ predict đang chọn.</p>`;
+    renderMapDetail(null);
+    return;
+  }
+
+  const sortedRows = rows
+    .slice()
+    .sort((a, b) => Number(b.predicted_us_aqi || 0) - Number(a.predicted_us_aqi || 0));
+  const activeRow =
+    rows.find((row) => row.location_key === selectedMapLocationKey) || sortedRows[0];
+  selectedMapLocationKey = activeRow.location_key;
+  const bounds = coordinateBounds(rows);
+  const labelKeys = new Set(sortedRows.slice(0, 6).map((row) => row.location_key));
+  const pointMarkup = rows
+    .map((row) => {
+      const point = projectCoordinate(row, bounds);
+      const category = row.aqi_category || "Unknown";
+      const selected = row.location_key === selectedMapLocationKey;
+      const label = escapeHtml(row.display_name || row.district_key);
+      return `
+        <g class="map-point-group">
+          <circle
+            class="map-point ${categoryClass(category)} ${selected ? "selected" : ""}"
+            cx="${point.x.toFixed(2)}"
+            cy="${point.y.toFixed(2)}"
+            r="${mapRadius(row).toFixed(2)}"
+            data-location-key="${escapeHtml(row.location_key)}"
+            tabindex="0"
+            role="button"
+            aria-label="${label}, AQI ${formatNumber(row.predicted_us_aqi, 1)}"
+          >
+            <title>${label}: AQI ${formatNumber(row.predicted_us_aqi, 1)}</title>
+          </circle>
+          ${
+            labelKeys.has(row.location_key)
+              ? `<text class="map-label" x="${(point.x + 1.8).toFixed(2)}" y="${(point.y - 1.8).toFixed(2)}">${label}</text>`
+              : ""
+          }
+        </g>
+      `;
+    })
+    .join("");
+  const provinceLabels = provinceCentroids(rows, bounds)
+    .map(
+      (row) => `
+        <text class="province-map-label" x="${row.x.toFixed(2)}" y="${row.y.toFixed(2)}">
+          ${escapeHtml(provinceNames[row.province] || row.province)}
+        </text>
+      `,
+    )
+    .join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 100 100" role="img" aria-label="Bản đồ prediction ${formatDateTime(selectedTargetAt)}">
+      <defs>
+        <radialGradient id="mapGlow" cx="50%" cy="40%" r="65%">
+          <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22" />
+          <stop offset="100%" stop-color="#0f172a" stop-opacity="0.08" />
+        </radialGradient>
+      </defs>
+      <rect class="map-bg" x="0" y="0" width="100" height="100" rx="6" />
+      <path class="map-region" d="M 18 16 C 35 5, 58 9, 78 22 C 92 31, 89 53, 80 69 C 68 90, 38 93, 20 80 C 5 69, 7 31, 18 16 Z" />
+      <g class="map-grid">
+        <path d="M 12 25 H 88 M 10 50 H 90 M 12 75 H 88" />
+        <path d="M 25 10 V 90 M 50 7 V 93 M 75 10 V 90" />
+      </g>
+      ${provinceLabels}
+      ${pointMarkup}
+    </svg>
+  `;
+
+  container.querySelectorAll("[data-location-key]").forEach((point) => {
+    const selectPoint = () => {
+      selectedMapLocationKey = point.getAttribute("data-location-key");
+      renderPredictionMap();
+    };
+    point.addEventListener("click", selectPoint);
+    point.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectPoint();
+      }
+    });
+  });
+  renderMapDetail(activeRow);
+}
+
 function renderRunStatus(data) {
   const container = $("runStatus");
   const run = data.collector_runs?.[0];
@@ -335,6 +517,7 @@ function render(data) {
   renderProvinceOptions(predictionsForSelectedHour());
   renderProvinces(data);
   renderCategoryBars(data);
+  renderPredictionMap();
   renderRunStatus(data);
   renderPredictionTable();
   renderObservationTable(data);

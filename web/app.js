@@ -132,19 +132,6 @@ function geometryPath(geometry, bounds) {
   return "";
 }
 
-function featureCenter(feature, bounds) {
-  let lonSum = 0;
-  let latSum = 0;
-  let count = 0;
-  visitCoordinates(feature.geometry?.coordinates, (point) => {
-    lonSum += Number(point[0]);
-    latSum += Number(point[1]);
-    count += 1;
-  });
-  if (!count) return null;
-  return projectLngLat(lonSum / count, latSum / count, bounds);
-}
-
 function targetKey(value) {
   return value ? String(value) : "";
 }
@@ -381,8 +368,6 @@ function renderPredictionMap() {
     featureByKey.get(selectedMapLocationKey) ||
     (activeRow ? featureByKey.get(activeRow.location_key) : null) ||
     features[0];
-  const labelKeys = new Set(sortedRows.slice(0, 8).map((row) => row.location_key));
-  labelKeys.add(selectedMapLocationKey);
   const regionMarkup = features
     .map((feature) => {
       const key = feature.properties.location_key;
@@ -407,21 +392,6 @@ function renderPredictionMap() {
       `;
     })
     .join("");
-  const renderedLabelKeys = new Set();
-  const labels = features
-    .map((feature) => {
-      const key = feature.properties.location_key;
-      if (!labelKeys.has(key) || renderedLabelKeys.has(key)) return "";
-      renderedLabelKeys.add(key);
-      const point = featureCenter(feature, bounds);
-      if (!point) return "";
-      return `
-        <text class="map-label" x="${point.x.toFixed(2)}" y="${point.y.toFixed(2)}">
-          ${escapeHtml(feature.properties.display_name || feature.properties.district_key)}
-        </text>
-      `;
-    })
-    .join("");
 
   container.innerHTML = `
     <svg viewBox="0 0 100 100" role="img" aria-label="GeoJSON map prediction ${formatDateTime(selectedTargetAt)}">
@@ -437,7 +407,6 @@ function renderPredictionMap() {
         <path d="M 25 10 V 90 M 50 7 V 93 M 75 10 V 90" />
       </g>
       <g class="region-layer">${regionMarkup}</g>
-      <g class="label-layer">${labels}</g>
     </svg>
   `;
 

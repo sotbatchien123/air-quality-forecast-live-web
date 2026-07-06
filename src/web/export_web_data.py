@@ -57,6 +57,28 @@ def clean_row(row: dict[str, Any]) -> dict[str, Any]:
     return {key: as_json_value(value) for key, value in row.items()}
 
 
+def select_latest_rows(
+    rows: list[dict[str, Any]],
+    key_columns: tuple[str, ...],
+    timestamp_column: str,
+) -> list[dict[str, Any]]:
+    """Keep one newest row per key without asking TiDB to run a large GROUP BY."""
+    selected: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = tuple(row.get(column) for column in key_columns)
+        timestamp = pd.Timestamp(row.get(timestamp_column) or pd.Timestamp.min)
+        current = selected.get(key)
+        if current is None:
+            selected[key] = row
+            continue
+        current_timestamp = pd.Timestamp(
+            current.get(timestamp_column) or pd.Timestamp.min
+        )
+        if timestamp > current_timestamp:
+            selected[key] = row
+    return list(selected.values())
+
+
 def aqi_category(value: Any) -> str:
     if value is None:
         return "Unknown"
@@ -146,20 +168,17 @@ def fetch_predictions_for_targets(cursor, target_hours: list[Any]) -> list[dict[
             l.is_live_supported
         FROM live_hourly_predictions p
         JOIN model_locations l ON l.location_key = p.location_key
-        JOIN (
-            SELECT location_key, target_at, MAX(generated_at) AS generated_at
-            FROM live_hourly_predictions
-            WHERE target_at IN ({placeholders})
-            GROUP BY location_key, target_at
-        ) latest
-          ON latest.location_key = p.location_key
-         AND latest.target_at = p.target_at
-         AND latest.generated_at = p.generated_at
-        ORDER BY p.target_at DESC, l.province_key, l.display_name
+        WHERE p.target_at IN ({placeholders})
+        ORDER BY p.target_at DESC, l.province_key, l.display_name, p.generated_at DESC
         """,
         tuple(target_hours),
     )
-    rows = [clean_row(row) for row in cursor.fetchall()]
+    latest_rows = select_latest_rows(
+        list(cursor.fetchall()),
+        ("location_key", "target_at"),
+        "generated_at",
+    )
+    rows = [clean_row(row) for row in latest_rows]
     for row in rows:
         row["aqi_category"] = aqi_category(row.get("predicted_us_aqi"))
     return rows
@@ -171,6 +190,12 @@ def fetch_latest_predictions(cursor) -> list[dict[str, Any]]:
 
 
 def fetch_latest_observations(cursor) -> list[dict[str, Any]]:
+    cursor.execute(
+        "SELECT MAX(observed_at) AS latest_observed_at FROM live_hourly_observations"
+    )
+    latest_observed_at = cursor.fetchone()["latest_observed_at"]
+    if latest_observed_at is None:
+        return []
     cursor.execute(
         """
         SELECT
@@ -204,15 +229,10 @@ def fetch_latest_observations(cursor) -> list[dict[str, Any]]:
             l.is_live_supported
         FROM live_hourly_observations o
         JOIN model_locations l ON l.location_key = o.location_key
-        JOIN (
-            SELECT location_key, MAX(observed_at) AS observed_at
-            FROM live_hourly_observations
-            GROUP BY location_key
-        ) latest
-          ON latest.location_key = o.location_key
-         AND latest.observed_at = o.observed_at
+        WHERE o.observed_at = %s
         ORDER BY l.province_key, l.display_name
-        """
+        """,
+        (latest_observed_at,),
     )
     rows = [clean_row(row) for row in cursor.fetchall()]
     for row in rows:

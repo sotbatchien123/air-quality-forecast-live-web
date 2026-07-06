@@ -10,7 +10,11 @@ SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from web.export_web_data import hourly_summary, summarize_predictions  # noqa: E402
+from web.export_web_data import (  # noqa: E402
+    hourly_summary,
+    select_latest_rows,
+    summarize_predictions,
+)
 
 
 class WebExportTests(unittest.TestCase):
@@ -62,6 +66,27 @@ class WebExportTests(unittest.TestCase):
         self.assertEqual([row["target_at"] for row in hours], ["2026-06-23T10:00:00", "2026-06-23T09:00:00"])
         self.assertEqual(hours[0]["prediction_count"], 1)
         self.assertEqual(hours[0]["provinces"][0]["province_key"], "ho_chi_minh")
+
+    def test_select_latest_rows_keeps_newest_generated_prediction(self) -> None:
+        rows = [
+            {
+                "location_key": "ho_chi_minh__quan_1",
+                "target_at": "2026-07-06 17:00:00",
+                "generated_at": "2026-07-06 16:10:00",
+                "predicted_us_aqi": 70.0,
+            },
+            {
+                "location_key": "ho_chi_minh__quan_1",
+                "target_at": "2026-07-06 17:00:00",
+                "generated_at": "2026-07-06 16:44:00",
+                "predicted_us_aqi": 75.0,
+            },
+        ]
+
+        selected = select_latest_rows(rows, ("location_key", "target_at"), "generated_at")
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["predicted_us_aqi"], 75.0)
 
 
 if __name__ == "__main__":

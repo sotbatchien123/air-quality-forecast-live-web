@@ -1,5 +1,6 @@
 const DATA_URL = "data/dashboard.json";
 const REGIONS_URL = "data/model_regions.geojson";
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 const provinceNames = {
   ba_ria_vung_tau: "Bà Rịa - Vũng Tàu",
@@ -13,6 +14,8 @@ let dashboard = null;
 let regionGeoJson = null;
 let selectedTargetAt = null;
 let selectedMapLocationKey = null;
+let userSelectedHistoricalTarget = false;
+let dashboardLoading = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -144,11 +147,17 @@ function ensureSelectedTarget(data) {
   const forecasts = getHourlyForecasts(data);
   if (!forecasts.length) {
     selectedTargetAt = data.latest_target_at || null;
+    userSelectedHistoricalTarget = false;
     return;
   }
   const keys = forecasts.map((row) => targetKey(row.target_at));
-  if (!selectedTargetAt || !keys.includes(targetKey(selectedTargetAt))) {
+  if (
+    !userSelectedHistoricalTarget ||
+    !selectedTargetAt ||
+    !keys.includes(targetKey(selectedTargetAt))
+  ) {
     selectedTargetAt = forecasts[0].target_at;
+    userSelectedHistoricalTarget = false;
   }
 }
 
@@ -229,6 +238,8 @@ function renderHourlyForecasts(data) {
   container.querySelectorAll("[data-target]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedTargetAt = button.getAttribute("data-target");
+      userSelectedHistoricalTarget =
+        targetKey(selectedTargetAt) !== targetKey(forecasts[0]?.target_at);
       render(dashboard);
     });
   });
@@ -551,6 +562,8 @@ function render(data) {
 }
 
 async function loadDashboard() {
+  if (dashboardLoading) return;
+  dashboardLoading = true;
   try {
     const timestamp = Date.now();
     const [dashboardResponse, regionsResponse] = await Promise.all([
@@ -564,6 +577,8 @@ async function loadDashboard() {
   } catch (error) {
     $("statusDot").className = "status-dot error";
     $("statusText").textContent = `Không tải được dữ liệu web: ${error.message}`;
+  } finally {
+    dashboardLoading = false;
   }
 }
 
@@ -571,3 +586,7 @@ $("provinceFilter").addEventListener("change", renderPredictionTable);
 $("searchInput").addEventListener("input", renderPredictionTable);
 
 loadDashboard();
+setInterval(loadDashboard, REFRESH_INTERVAL_MS);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadDashboard();
+});

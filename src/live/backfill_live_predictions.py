@@ -2,12 +2,15 @@
 
 Muc luc:
 1. Tim cac gio observation da co trong TiDB nhung chua co prediction.
-2. Hydrate observation window can thiet de tao feature lag/rolling.
-3. Du doan bang model hourly va upsert vao `live_hourly_predictions`.
-4. Export lai `web/data/dashboard.json` de GitHub Pages co timeline moi.
+2. Tuy chon bu observation gap khi GitHub Actions bi skip gio.
+3. Hydrate observation window can thiet de tao feature lag/rolling.
+4. Du doan bang model hourly va upsert vao `live_hourly_predictions`.
+5. Export lai `web/data/dashboard.json` de GitHub Pages co timeline moi.
 
 Script nay khong goi TomTom cho qua khu. Neu gio target khong co weather row
-trong observation, script dung weather cua gio current lam fallback.
+trong observation, script dung weather cua gio current lam fallback. Cac
+observation duoc bu gap co source `gap_fill_from_nearest_live_history` de phan
+biet voi du lieu live thu that.
 """
 
 from __future__ import annotations
@@ -31,8 +34,10 @@ for source_dir in (SRC_DIR, MODELS_SRC_DIR):
 
 from database.live_database import DatabaseConfigError, LiveDatabase, model_version  # noqa: E402
 from live.live_hourly_predictor import (  # noqa: E402
+    LOCATION_CONTEXT_COLUMNS,
     MODEL_FILE,
     REQUIRED_HISTORY_HOURS,
+    TIME_SERIES_COLUMNS,
     TOMTOM_UNSUPPORTED_LOCATIONS,
     TIMEZONE,
     WEATHER_COLUMNS,
@@ -43,6 +48,8 @@ from live.live_hourly_predictor import (  # noqa: E402
 )
 from web.export_web_data import DEFAULT_OUTPUT, export_web_data  # noqa: E402
 
+GAP_FILL_SOURCE = "gap_fill_from_nearest_live_history"
+SOURCE_COLUMNS = ["traffic_source", "aqi_source", "weather_source"]
 
 OBSERVATION_WINDOW_SELECT = """
     SELECT
@@ -159,6 +166,139 @@ def fetch_observations(
     return frame
 
 
+def fetch_observation_counts(
+    database: LiveDatabase,
+    start_current: pd.Timestamp,
+    end_current: pd.Timestamp,
+) -> dict[pd.Timestamp, int]:
+    connection = database.connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT o.observed_at, COUNT(DISTINCT o.location_key) AS location_count
+                FROM live_hourly_observations o
+                JOIN model_locations l ON l.location_key = o.location_key
+                WHERE l.is_live_supported = 1
+                  AND o.observed_at >= %s
+                  AND o.observed_at <= %s
+                GROUP BY o.observed_at
+                ORDER BY o.observed_at
+                """,
+                (start_current.to_pydatetime(), end_current.to_pydatetime()),
+            )
+            return {
+                pd.Timestamp(row["observed_at"]): int(row["location_count"])
+                for row in cursor.fetchall()
+            }
+    finally:
+        connection.close()
+
+
+def build_gap_filled_observation_rows(
+    observations: pd.DataFrame,
+    missing_hours: list[pd.Timestamp],
+    start_current: pd.Timestamp,
+    end_current: pd.Timestamp,
+) -> pd.DataFrame:
+    if observations.empty or not missing_hours:
+        return pd.DataFrame()
+
+    frame = observations.copy()
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="raise")
+    grid_start = min(frame["timestamp"].min(), start_current)
+    grid_end = max(frame["timestamp"].max(), end_current)
+    hours = pd.date_range(grid_start, grid_end, freq="h")
+    missing = set(pd.Timestamp(hour) for hour in missing_hours)
+    existing_pairs = set(
+        zip(frame["timestamp"], frame["location_key"].astype(str))
+    )
+    fill_columns = [
+        column
+        for column in [*LOCATION_CONTEXT_COLUMNS, *TIME_SERIES_COLUMNS]
+        if column in frame.columns
+    ]
+    now = datetime.now(TIMEZONE).isoformat()
+    groups: list[pd.DataFrame] = []
+    for location_key, group in frame.groupby("location_key", sort=False):
+        location_key = str(location_key)
+        filled = (
+            group.sort_values("timestamp")
+            .drop_duplicates("timestamp", keep="last")
+            .set_index("timestamp")
+            .reindex(hours)
+        )
+        filled["timestamp"] = filled.index
+        filled["location_key"] = location_key
+        filled[fill_columns] = filled[fill_columns].ffill().bfill().infer_objects()
+        filled["collection_time"] = now
+        for column in SOURCE_COLUMNS:
+            filled[column] = GAP_FILL_SOURCE
+        filled = filled.reset_index(drop=True)
+        rows = filled[filled["timestamp"].isin(missing)].copy()
+        rows = rows[
+            [
+                (row["timestamp"], str(row["location_key"])) not in existing_pairs
+                for row in rows.to_dict("records")
+            ]
+        ]
+        groups.append(rows)
+
+    if not groups:
+        return pd.DataFrame()
+    output = pd.concat(groups, ignore_index=True)
+    required = ["timestamp", "collection_time", "location_key", *TIME_SERIES_COLUMNS]
+    return output.dropna(subset=[column for column in required if column in output])
+
+
+def fill_missing_observation_hours(
+    database: LiveDatabase,
+    locations: pd.DataFrame,
+    start_current: pd.Timestamp,
+    end_current: pd.Timestamp,
+    dry_run: bool,
+) -> int:
+    required_locations = len(locations)
+    counts = fetch_observation_counts(database, start_current, end_current)
+    all_hours = list(pd.date_range(start_current, end_current, freq="h"))
+    missing_hours = [
+        pd.Timestamp(hour)
+        for hour in all_hours
+        if counts.get(pd.Timestamp(hour), 0) < required_locations
+    ]
+    if not missing_hours:
+        print("No missing observation hours found.")
+        return 0
+
+    hydrate_start = start_current - pd.Timedelta(hours=REQUIRED_HISTORY_HOURS)
+    hydrate_end = end_current + pd.Timedelta(hours=REQUIRED_HISTORY_HOURS)
+    observations = fetch_observations(database, hydrate_start, hydrate_end)
+    observations = filter_observations_for_locations(observations, locations)
+    synthetic = build_gap_filled_observation_rows(
+        observations,
+        missing_hours,
+        start_current,
+        end_current,
+    )
+    if synthetic.empty:
+        print("No observation gap-fill rows could be generated.")
+        return 0
+
+    if dry_run:
+        print(
+            f"Dry run: would gap-fill {len(synthetic):,} observation rows "
+            f"for {synthetic['timestamp'].nunique()} hours."
+        )
+        return int(len(synthetic))
+
+    inserted = database.upsert_observations(synthetic)
+    print(
+        f"Gap-filled {inserted:,} observation rows "
+        f"for {synthetic['timestamp'].nunique()} hours."
+    )
+    return inserted
+
+
 def target_weather_from_observations(
     observations: pd.DataFrame,
     current: pd.Timestamp,
@@ -233,6 +373,8 @@ def backfill_predictions(
     end_target: pd.Timestamp | None,
     overwrite: bool,
     dry_run: bool,
+    fill_observation_gaps: bool = False,
+    export_json: bool = True,
 ) -> int:
     try:
         database = LiveDatabase.from_environment(required=True)
@@ -246,6 +388,25 @@ def backfill_predictions(
     )
     locations = all_locations[all_locations["is_live_supported"]].reset_index(drop=True)
     required_locations = len(locations)
+
+    if fill_observation_gaps:
+        end_current = (
+            end_target - pd.Timedelta(hours=1)
+            if end_target is not None
+            else pd.Timestamp(datetime.now(TIMEZONE).replace(tzinfo=None)).floor("h")
+        )
+        start_current = (
+            start_target - pd.Timedelta(hours=1)
+            if start_target is not None
+            else end_current - pd.Timedelta(hours=167)
+        )
+        fill_missing_observation_hours(
+            database,
+            locations,
+            start_current,
+            end_current,
+            dry_run,
+        )
 
     candidates = candidate_current_hours(
         database,
@@ -300,7 +461,8 @@ def backfill_predictions(
             f"Backfilled {inserted:,} prediction rows "
             f"for {predictions['target_timestamp'].nunique()} target hours."
         )
-        export_web_data(DEFAULT_OUTPUT)
+        if export_json:
+            export_web_data(DEFAULT_OUTPUT)
 
     if skipped:
         print(f"Skipped {len(skipped)} current hours without usable features.")
@@ -319,6 +481,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--end-target", help="Inclusive target hour, local time")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--fill-observation-gaps",
+        action="store_true",
+        help="Fill missing observation hours from nearest stored live history first.",
+    )
+    parser.add_argument(
+        "--skip-export",
+        action="store_true",
+        help="Do not rewrite web/data/dashboard.json after backfill.",
+    )
     return parser.parse_args()
 
 
@@ -329,6 +501,8 @@ def main() -> None:
         parse_timestamp(args.end_target),
         args.overwrite,
         args.dry_run,
+        args.fill_observation_gaps,
+        not args.skip_export,
     )
 
 

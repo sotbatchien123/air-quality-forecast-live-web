@@ -56,6 +56,15 @@ function categoryClass(category) {
   return category.split(" ")[0];
 }
 
+function observationSourceLabel(row) {
+  const sourceText = [
+    row.traffic_source,
+    row.aqi_source,
+    row.weather_source,
+  ].join(" ");
+  return sourceText.includes("gap_fill") ? "Gap fill" : "Live";
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -499,7 +508,7 @@ function renderObservationTable(data) {
     .sort((a, b) => Number(b.us_aqi || 0) - Number(a.us_aqi || 0))
     .slice(0, 20);
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="6" class="muted">Chưa có observation.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="muted">Chưa có observation.</td></tr>`;
     return;
   }
   body.innerHTML = rows
@@ -512,6 +521,7 @@ function renderObservationTable(data) {
           <td>${formatNumber(row.currentspeed, 1)} km/h</td>
           <td>${formatNumber(row.temperature_2m, 1)} °C</td>
           <td>${formatNumber(row.relative_humidity_2m, 1)}%</td>
+          <td>${observationSourceLabel(row)}</td>
         </tr>
       `,
     )

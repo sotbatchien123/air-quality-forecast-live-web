@@ -3,7 +3,8 @@
 Muc luc:
 1. Hydrate observation/prediction CSV tam thoi tu TiDB cho runner moi.
 2. Chay live collector mot lan bang `live_hourly_predictor.run()`.
-3. Export JSON dashboard cho GitHub Pages.
+3. Bu cac gio GitHub Actions bi skip/fail bang history gan nhat.
+4. Export JSON dashboard cho GitHub Pages.
 
 GitHub-hosted runner la moi truong tam thoi. Vi vay script nay khong dua vao
 `data/live` da ton tai san; no doc lai history gan nhat tu TiDB truoc khi tao
@@ -27,6 +28,7 @@ for source_dir in (SRC_DIR, MODELS_SRC_DIR):
         sys.path.insert(0, str(source_dir))
 
 from database.live_database import DatabaseConfigError, LiveDatabase  # noqa: E402
+from live.backfill_live_predictions import backfill_predictions  # noqa: E402
 from live.live_hourly_predictor import (  # noqa: E402
     DEFAULT_OBSERVATIONS_FILE,
     DEFAULT_PREDICTIONS_DIR,
@@ -197,6 +199,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--web-output-file", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--skip-collection", action="store_true")
+    parser.add_argument(
+        "--backfill-hours",
+        type=int,
+        default=240,
+        help="Recent target-hour window to gap-fill/backfill after live collection.",
+    )
+    parser.add_argument(
+        "--no-gap-fill",
+        action="store_true",
+        help="Backfill predictions only; do not synthesize missing observations.",
+    )
     return parser.parse_args()
 
 
@@ -256,6 +269,30 @@ def main() -> None:
         except Exception as exc:
             print(
                 "WARNING: live collection failed; exporting latest TiDB data only: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+
+    if args.backfill_hours > 0:
+        current = local_hour(args.timestamp)
+        end_target = current + pd.Timedelta(hours=1)
+        start_target = end_target - pd.Timedelta(hours=args.backfill_hours)
+        try:
+            filled_hours = backfill_predictions(
+                start_target,
+                end_target,
+                overwrite=False,
+                dry_run=False,
+                fill_observation_gaps=not args.no_gap_fill,
+                export_json=False,
+            )
+            print(
+                f"Recent backfill checked {args.backfill_hours} hours; "
+                f"generated {filled_hours} target hours."
+            )
+        except Exception as exc:
+            print(
+                "WARNING: recent backfill failed; exporting latest TiDB data only: "
                 f"{exc}",
                 file=sys.stderr,
             )

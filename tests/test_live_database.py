@@ -24,6 +24,7 @@ from database.live_database import (  # noqa: E402
 )
 from live.live_hourly_predictor import (  # noqa: E402
     filter_observations_for_locations,
+    read_predictions_file,
     upsert_observations,
     upsert_predictions,
 )
@@ -149,6 +150,33 @@ class PredictionFileTests(unittest.TestCase):
             result = upsert_predictions(pd.DataFrame([newer]), output)
             self.assertEqual(len(result), 1)
             self.assertEqual(float(result.iloc[0]["predicted_us_aqi"]), 75.0)
+
+    def test_read_predictions_file_ignores_repeated_header_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "predictions.csv"
+            frame = pd.DataFrame(
+                [
+                    {
+                        "target_timestamp": "target_timestamp",
+                        "location_key": "location_key",
+                        "model_version": "model_version",
+                    },
+                    {
+                        "target_timestamp": "2026-07-13 20:00:00",
+                        "location_key": "ho_chi_minh__quan_1",
+                        "model_version": "hourly@test",
+                    },
+                ]
+            )
+            frame.to_csv(output, index=False, encoding="utf-8-sig")
+
+            result = read_predictions_file(output)
+
+            self.assertEqual(len(result), 1)
+            self.assertEqual(
+                result.iloc[0]["target_timestamp"],
+                pd.Timestamp("2026-07-13 20:00:00"),
+            )
 
 
 if __name__ == "__main__":

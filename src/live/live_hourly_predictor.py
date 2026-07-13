@@ -902,15 +902,7 @@ def run(
 
         inference = build_inference(scoring_observations, current, target_weather, bundle)
         if inference is None:
-            predictions = (
-                pd.read_csv(predictions_file, encoding="utf-8-sig")
-                if predictions_file.is_file()
-                else pd.DataFrame()
-            )
-            if not predictions.empty:
-                predictions["target_timestamp"] = pd.to_datetime(
-                    predictions["target_timestamp"], errors="raise"
-                )
+            predictions = read_predictions_file(predictions_file)
             if database is not None:
                 sync_database_window(
                     database,

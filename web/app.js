@@ -1,3 +1,10 @@
+import {
+  findHourlyForecastByLookup,
+  hiddenHourlyForecastCount,
+  normalizeHourlyLookup,
+  visibleHourlyForecasts,
+} from "./hourly-forecast-utils.mjs";
+
 const DATA_URL = "data/dashboard.json";
 const REGIONS_URL = "data/model_regions.geojson";
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -16,6 +23,7 @@ let selectedTargetAt = null;
 let selectedMapLocationKey = null;
 let userSelectedHistoricalTarget = false;
 let dashboardLoading = false;
+let hourlyLookupStatusMessage = "";
 
 const $ = (id) => document.getElementById(id);
 
@@ -165,8 +173,11 @@ function ensureSelectedTarget(data) {
     !selectedTargetAt ||
     !keys.includes(targetKey(selectedTargetAt))
   ) {
+    const selectedTargetChanged =
+      targetKey(selectedTargetAt) !== targetKey(forecasts[0].target_at);
     selectedTargetAt = forecasts[0].target_at;
     userSelectedHistoricalTarget = false;
+    if (selectedTargetChanged) hourlyLookupStatusMessage = "";
   }
 }
 
@@ -226,9 +237,52 @@ function renderHourlyForecasts(data) {
   const forecasts = getHourlyForecasts(data);
   if (!forecasts.length) {
     container.innerHTML = `<p class="muted">Chưa có lịch sử prediction hourly trong TiDB.</p>`;
+    $("hourlyForecastMeta").textContent = "Chưa có giờ dự báo để tra cứu.";
+    $("hourlyLookupStatus").textContent = "";
+    $("hourlyLookupInput").disabled = true;
+    $("resetHourlyLookup").disabled = true;
+    $("hourlyTargetOptions").replaceChildren();
     return;
   }
-  container.innerHTML = forecasts
+  const visibleForecasts = visibleHourlyForecasts(forecasts);
+  const hiddenCount = hiddenHourlyForecastCount(forecasts);
+  const oldestForecast = forecasts.at(-1);
+  const firstHiddenForecast = forecasts[visibleForecasts.length];
+  const meta = $("hourlyForecastMeta");
+  if (hiddenCount > 0) {
+    meta.textContent = `Đang hiển thị ${visibleForecasts.length}/${forecasts.length} giờ mới nhất. ${hiddenCount} giờ còn lại đều có thể tra cứu, từ ${formatDateTime(oldestForecast?.target_at)} đến ${formatDateTime(firstHiddenForecast?.target_at)}.`;
+  } else {
+    meta.textContent = `Đang hiển thị toàn bộ ${forecasts.length} giờ dự báo hiện có.`;
+  }
+
+  const lookupInput = $("hourlyLookupInput");
+  lookupInput.disabled = false;
+  $("resetHourlyLookup").disabled = false;
+  const options = $("hourlyTargetOptions");
+  options.replaceChildren();
+  forecasts.forEach((row) => {
+    const option = document.createElement("option");
+    option.value = normalizeHourlyLookup(row.target_at).replace("T", " ");
+    option.label = `${formatDateTime(row.target_at)} · ${formatNumber(row.avg_predicted_us_aqi, 1)} AQI`;
+    options.appendChild(option);
+  });
+
+  const selectedIsVisible = visibleForecasts.some(
+    (row) => targetKey(row.target_at) === targetKey(selectedTargetAt),
+  );
+  if (document.activeElement !== lookupInput) {
+    lookupInput.value = selectedIsVisible
+      ? ""
+      : normalizeHourlyLookup(selectedTargetAt).replace("T", " ");
+  }
+  const lookupStatus = $("hourlyLookupStatus");
+  lookupStatus.textContent =
+    hourlyLookupStatusMessage ||
+    (selectedIsVisible
+      ? ""
+      : `Đang xem dữ liệu tra cứu: ${formatDateTime(selectedTargetAt)}.`);
+
+  container.innerHTML = visibleForecasts
     .map((row) => {
       const active = targetKey(row.target_at) === targetKey(selectedTargetAt);
       return `
@@ -249,6 +303,7 @@ function renderHourlyForecasts(data) {
       selectedTargetAt = button.getAttribute("data-target");
       userSelectedHistoricalTarget =
         targetKey(selectedTargetAt) !== targetKey(forecasts[0]?.target_at);
+      hourlyLookupStatusMessage = "";
       render(dashboard);
     });
   });
@@ -594,6 +649,35 @@ async function loadDashboard() {
 
 $("provinceFilter").addEventListener("change", renderPredictionTable);
 $("searchInput").addEventListener("input", renderPredictionTable);
+$("hourlyLookupForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = $("hourlyLookupInput");
+  const forecast = findHourlyForecastByLookup(
+    getHourlyForecasts(),
+    input.value,
+  );
+  if (!forecast) {
+    const lookupValue = input.value.trim();
+    $("hourlyLookupStatus").textContent = lookupValue
+      ? `Không có prediction cho giờ ${lookupValue}. Hãy chọn một mốc trong danh sách gợi ý.`
+      : "Hãy nhập hoặc chọn một giờ để tra cứu.";
+    return;
+  }
+  selectedTargetAt = forecast.target_at;
+  userSelectedHistoricalTarget =
+    targetKey(selectedTargetAt) !== targetKey(getHourlyForecasts()[0]?.target_at);
+  hourlyLookupStatusMessage = `Đang xem dữ liệu tra cứu: ${formatDateTime(selectedTargetAt)}.`;
+  render(dashboard);
+});
+$("resetHourlyLookup").addEventListener("click", () => {
+  const forecasts = getHourlyForecasts();
+  if (!forecasts.length) return;
+  selectedTargetAt = forecasts[0].target_at;
+  userSelectedHistoricalTarget = false;
+  $("hourlyLookupInput").value = "";
+  hourlyLookupStatusMessage = `Đã quay về giờ dự báo mới nhất: ${formatDateTime(selectedTargetAt)}.`;
+  render(dashboard);
+});
 
 loadDashboard();
 setInterval(loadDashboard, REFRESH_INTERVAL_MS);

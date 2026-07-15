@@ -226,6 +226,73 @@ small {
   gap: 12px;
 }
 
+.hourly-tools {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.hourly-meta,
+.hourly-lookup-status {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.hourly-lookup-status {
+  min-height: 1.55em;
+  margin-top: 4px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.hourly-lookup {
+  display: grid;
+  grid-template-columns: auto minmax(210px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 660px);
+}
+
+.hourly-lookup label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hourly-lookup button {
+  min-height: 42px;
+  border: 1px solid rgba(56, 189, 248, 0.76);
+  border-radius: 14px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: #082f49;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.hourly-lookup button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.hourly-lookup button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.secondary-button {
+  border-color: var(--border);
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text);
+}
+
 .hour-card {
   color: var(--text);
   cursor: pointer;
@@ -586,6 +653,16 @@ footer {
   .filters {
     width: 100%;
     flex-direction: column;
+  }
+
+  .hourly-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hourly-lookup {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   select,

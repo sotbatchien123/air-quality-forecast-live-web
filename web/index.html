@@ -8,7 +8,7 @@
       name="description"
       content="Dashboard dự báo AQI và giao thông theo giờ cho 5 tỉnh/thành Đông Nam Bộ."
     />
-    <link rel="stylesheet" href="styles.css?v=20260705-geojson-nolabels" />
+    <link rel="stylesheet" href="styles.css?v=20260715-hourly-lookup" />
   </head>
   <body>
     <header class="hero">
@@ -72,6 +72,28 @@
             <h2>Dự báo từng giờ từ model hourly</h2>
           </div>
           <span class="muted">Mỗi GitHub Actions run sinh dự báo cho giờ kế tiếp</span>
+        </div>
+        <div class="hourly-tools">
+          <div>
+            <p id="hourlyForecastMeta" class="hourly-meta muted"></p>
+            <p id="hourlyLookupStatus" class="hourly-lookup-status" aria-live="polite"></p>
+          </div>
+          <form id="hourlyLookupForm" class="hourly-lookup" role="search">
+            <label for="hourlyLookupInput">Tra cứu giờ khác</label>
+            <input
+              id="hourlyLookupInput"
+              type="search"
+              list="hourlyTargetOptions"
+              placeholder="VD: 2026-07-13 18:00"
+              aria-describedby="hourlyForecastMeta"
+              autocomplete="off"
+            />
+            <datalist id="hourlyTargetOptions"></datalist>
+            <button type="submit">Tra cứu</button>
+            <button id="resetHourlyLookup" class="secondary-button" type="button">
+              Về giờ mới nhất
+            </button>
+          </form>
         </div>
         <div id="hourlyForecastGrid" class="hour-grid"></div>
       </section>
@@ -210,6 +232,6 @@
       </p>
     </footer>
 
-    <script src="app.js?v=20260705-geojson-nolabels"></script>
+    <script type="module" src="app.js?v=20260715-hourly-lookup"></script>
   </body>
 </html>
